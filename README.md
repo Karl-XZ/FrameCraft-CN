@@ -6,6 +6,8 @@
 
 ## 界面与成片示意
 
+演示视频：https://www.bilibili.com/video/BV1Q6jC6QEPv
+
 项目工作台会展示素材区、生成进度、步骤状态和项目聊天，用户可以直接在右侧对话区继续要求 Agent 修改视频：
 
 ![FrameCraft-CN 工作台预览](docs/assets/readme/workbench-chat-and-progress.png)
