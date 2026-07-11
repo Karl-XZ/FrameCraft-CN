@@ -147,6 +147,12 @@ HyperFrames 预览仍是最终视觉效果的真实来源。CSS、GSAP、Lottie�
 
 默认端口为后端 `8022`、前端 `5174`，并默认绑定 `0.0.0.0` 便于局域网访问。开发模式下 Vite 会把 `/api` 代理到 `http://127.0.0.1:8022`；如需改后端地址，设置：
 
+后端启动脚本默认不开热重载，以免 Agent 在生成视频时写入运行时脚本或截图触发服务重启。开发时如需热重载，使用：
+
+```bash
+FRAMECRAFT_BACKEND_RELOAD=1 ./scripts/start-backend.sh
+```
+
 ```bash
 FRAMECRAFT_BACKEND_URL=http://<host-ip>:8022 ./scripts/start-frontend.sh
 ```

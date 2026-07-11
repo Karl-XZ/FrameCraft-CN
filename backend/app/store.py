@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import tempfile
 import threading
 import uuid
 from contextlib import contextmanager
@@ -17,7 +18,12 @@ ROOT = Path(__file__).resolve().parents[2]
 STORAGE = ROOT / "backend" / "storage"
 UPLOADS = ROOT / "uploads"
 OUTPUTS = ROOT / "outputs"
-RUNTIME = ROOT / "backend" / "runtime"
+RUNTIME = Path(
+    os.getenv(
+        "FRAMECRAFT_RUNTIME_DIR",
+        str(Path(tempfile.gettempdir()) / "framecraft-agent-runtime" / ROOT.name),
+    )
+)
 DB_PATH = STORAGE / "db.json"
 LOCK_PATH = STORAGE / "db.lock"
 

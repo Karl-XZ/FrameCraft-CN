@@ -219,6 +219,18 @@ def cmd_register_version(args: argparse.Namespace) -> None:
             draft_result = export_jianying_draft(pid, version_dir)
         except DraftExportError as exc:
             _print({"ok": False, "error": str(exc)}, 1)
+    hyperframes_zip = None
+    hyperframes_dir = version_dir / "hyperframes"
+    if project_settings.get("keep_hyperframes", True) and hyperframes_dir.is_dir():
+        hyperframes_zip = version_dir / "hyperframes_project.zip"
+        if hyperframes_zip.exists():
+            hyperframes_zip.unlink()
+        shutil.make_archive(
+            str(hyperframes_zip.with_suffix("")),
+            "zip",
+            root_dir=version_dir,
+            base_dir="hyperframes",
+        )
 
     def op(data):
         existing = [v for v in data["versions"].values() if v["project_id"] == pid]
@@ -233,7 +245,7 @@ def cmd_register_version(args: argparse.Namespace) -> None:
             "subtitles_url": f"/api/projects/{pid}/versions/{vid}/subtitles",
             "cover_url": None,
             "publish_copy_url": None,
-            "hyperframes_url": f"/api/projects/{pid}/versions/{vid}/hyperframes",
+            "hyperframes_url": f"/api/projects/{pid}/versions/{vid}/hyperframes" if hyperframes_zip else None,
             "version_dir": str(version_dir),
             "preview_path": str(preview),
             "draft_path": str(draft_result.zip_path) if draft_result else None,
