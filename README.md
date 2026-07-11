@@ -4,6 +4,16 @@
 
 它的目标不是提供一条写死的脚本流水线，而是提供一个能持续对话、持续改片、真实出片的 Agent 服务。
 
+## 界面与成片示意
+
+项目工作台会展示素材区、生成进度、步骤状态和项目聊天，用户可以直接在右侧对话区继续要求 Agent 修改视频：
+
+![FrameCraft-CN 工作台预览](docs/assets/readme/workbench-chat-and-progress.png)
+
+成片阶段支持在人物主画面上叠加由 Agent 设计的信息块、步骤动画和字幕，最终通过 HyperFrames 真实渲染输出：
+
+![FrameCraft-CN 成片示意](docs/assets/readme/final-video-sample.png)
+
 ## 这版解决什么问题
 
 - 不再把“分析”“生成”“修补”拆成互相失忆的多个子系统。
