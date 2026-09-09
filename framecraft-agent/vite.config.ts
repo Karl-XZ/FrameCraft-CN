@@ -15,4 +15,14 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    port: Number(process.env.FRAMECRAFT_FRONTEND_PORT ?? 4174),
+    allowedHosts: ['.trycloudflare.com', 'localhost', '127.0.0.1'],
+    proxy: {
+      '/api': {
+        target: backendTarget,
+        changeOrigin: true,
+      },
+    },
+  },
 })

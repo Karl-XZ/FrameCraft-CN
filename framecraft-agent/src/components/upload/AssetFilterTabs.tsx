@@ -1,14 +1,13 @@
 import React from 'react';
-import { FileVideo, Image, Music, Hexagon, Folder } from 'lucide-react';
+import { FileText, Film, Folder, Image, Music } from 'lucide-react';
 import { useProjectStore, AssetType } from '../../store/projectStore';
 
 const FILTERS: { key: AssetType; label: string; icon: React.ReactNode }[] = [
   { key: 'all', label: '全部', icon: <Folder className="w-3 h-3" /> },
-  { key: '口播视频', label: '口播视频', icon: <FileVideo className="w-3 h-3" /> },
-  { key: 'B-roll', label: 'B-roll', icon: <Image className="w-3 h-3" /> },
-  { key: '图片', label: '图片', icon: <Image className="w-3 h-3" /> },
   { key: '音频', label: '音频', icon: <Music className="w-3 h-3" /> },
-  { key: 'LOGO', label: 'LOGO', icon: <Hexagon className="w-3 h-3" /> },
+  { key: '讲稿', label: '讲稿', icon: <FileText className="w-3 h-3" /> },
+  { key: '图片', label: '图片', icon: <Image className="w-3 h-3" /> },
+  { key: '素材', label: '素材', icon: <Film className="w-3 h-3" /> },
 ];
 
 export default function AssetFilterTabs() {

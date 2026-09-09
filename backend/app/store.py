@@ -60,12 +60,15 @@ def default_db() -> dict[str, Any]:
         "versions": {},
         "chat": {},
         "settings": {
-            "provider": "codex",
+            "provider": "deepseek",
             "api_key": "",
-            "text_model": "",
-            "vision_model": "",
-            "base_url": "",
-            "asr_model": "agent-managed",
+            "text_model": "deepseek-v4-flash",
+            "pro_model": "deepseek-v4-pro",
+            "vision_model": "deepseek-v4-flash-vision-exp",
+            "base_url": "https://api.deepseek.com",
+            "asr_model": "whisper-small",
+            "tts_model": "edge-tts",
+            "tts_voice": "zh-CN-XiaoxiaoNeural",
         },
     }
 
@@ -84,6 +87,8 @@ def load_db() -> dict[str, Any]:
     base = default_db()
     for key, value in base.items():
         data.setdefault(key, value)
+    if data.get("settings", {}).get("provider") != "deepseek":
+        data["settings"] = base["settings"]
     return data
 
 
@@ -173,8 +178,12 @@ def public_version(version: dict[str, Any]) -> dict[str, Any]:
 
 def public_settings(settings: dict[str, Any]) -> dict[str, Any]:
     out = deepcopy(settings)
+    env_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    env_base = os.getenv("DEEPSEEK_BASE_URL", "").strip()
     out["api_key"] = ""
-    out["api_key_configured"] = bool(settings.get("api_key"))
+    out["api_key_configured"] = bool(env_key or settings.get("api_key"))
+    if env_base:
+        out["base_url"] = env_base
     return out
 
 

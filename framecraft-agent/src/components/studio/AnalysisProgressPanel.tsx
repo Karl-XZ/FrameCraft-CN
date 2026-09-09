@@ -4,20 +4,20 @@ import GlassCard from '../ui/GlassCard';
 import { useProjectStore } from '../../store/projectStore';
 
 const TASK_LABELS = [
-  '提取口播音频',
-  'Whisper 转录',
-  '分析口播结构',
-  '抽帧理解 B-roll',
-  '匹配素材备注',
-  '生成剪辑方案',
+  '准备输入源',
+  '本地 ASR 转写',
+  '整理场景分段',
+  '分析讲述结构',
+  '规划视觉方向',
+  '生成视频方案',
 ];
 
 const PLAN_SUBSTEPS = [
-  '整理场景分段',
-  '匹配 B-roll 计划',
-  '规划动效元素',
-  '大模型润色文案',
-  '保存剪辑方案',
+  '整理场景节奏',
+  '规划图形信息层',
+  '生成字幕策略',
+  '细化镜头与动画',
+  '保存视频方案',
 ];
 
 function stepStatus(label: string, completed: string[], currentTask: string): 'done' | 'active' | 'pending' {
@@ -38,7 +38,7 @@ export default function AnalysisProgressPanel() {
   } = useProjectStore();
 
   const terminalRef = useRef<HTMLPreElement>(null);
-  const isPlanStep = currentAnalyzeTask.startsWith('生成剪辑方案');
+  const isPlanStep = currentAnalyzeTask.startsWith('生成视频方案') || currentAnalyzeTask.startsWith('生成剪辑方案');
   const displayTask = isPlanStep && planSubstep
     ? `生成剪辑方案 · ${planSubstep}`
     : currentAnalyzeTask;
@@ -54,7 +54,7 @@ export default function AnalysisProgressPanel() {
         <div className="relative z-10 flex flex-col items-center gap-6">
           <div className="flex items-center gap-3">
             <div className="w-3 h-3 rounded-full bg-primary animate-dot-pulse" />
-            <span className="text-lg font-bold text-text-main">正在理解你的素材</span>
+            <span className="text-lg font-bold text-text-main">正在理解你的输入内容</span>
           </div>
           <div className="relative w-36 h-36">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
@@ -85,7 +85,7 @@ export default function AnalysisProgressPanel() {
           {isPlanStep && (
             <div className="w-full max-w-sm space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-text-muted">剪辑方案生成进度</span>
+                <span className="text-text-muted">视频方案生成进度</span>
                 <span className="text-primary-light font-mono">{planProgress}%</span>
               </div>
               <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">

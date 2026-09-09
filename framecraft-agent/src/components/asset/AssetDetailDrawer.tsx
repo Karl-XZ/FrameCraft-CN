@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { X, FileVideo, Image, Music, Hexagon, Tag, MessageSquare, Star, Brain } from 'lucide-react';
+import { X, FileText, Film, Image, Music, Tag, MessageSquare, Star, Brain } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useStudioWorkflow } from '../../hooks/useStudioWorkflow';
 import { api, type AssetAnalysis } from '../../api/client';
 import GradientButton from '../ui/GradientButton';
 
-const TAGS = ['口播视频', 'B-roll', '图片', '音频', 'LOGO'];
+const TAGS = ['音频', '讲稿', '图片', '素材'];
 
 function formatBrollTime(sec: number | undefined): string {
   if (sec == null || Number.isNaN(sec)) return '—';
@@ -19,7 +19,7 @@ export default function AssetDetailDrawer() {
   const { persistAsset } = useStudioWorkflow();
   const asset = assets.find((a) => a.id === selectedAssetId);
   const [note, setNote] = useState('');
-  const [tag, setTag] = useState<string>('B-roll');
+  const [tag, setTag] = useState<string>('素材');
   const [mustUse, setMustUse] = useState(false);
   const [priority, setPriority] = useState(5);
   const [saving, setSaving] = useState(false);
@@ -29,7 +29,7 @@ export default function AssetDetailDrawer() {
   useEffect(() => {
     if (!asset) return;
     setNote(asset.note || '');
-    setTag(asset.type || 'B-roll');
+    setTag(asset.type || '素材');
     setMustUse(asset.mustUse);
     setPriority(asset.priority || 5);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -76,9 +76,9 @@ export default function AssetDetailDrawer() {
     }
   };
 
-  const TypeIcon = asset.type === '口播视频' || asset.type === 'B-roll' ? FileVideo :
-    asset.type === '图片' ? Image :
-    asset.type === '音频' ? Music : Hexagon;
+  const TypeIcon = asset.type === '图片' ? Image :
+    asset.type === '音频' ? Music :
+    asset.type === '讲稿' ? FileText : Film;
 
   const usageLabel = analysis?.ready && analysis.recommended_usage?.length
     ? analysis.recommended_usage.join(' · ')
@@ -205,7 +205,7 @@ export default function AssetDetailDrawer() {
               {analysisLoading ? (
                 <p className="text-xs text-text-muted">加载分析结果…</p>
               ) : !analysis?.ready ? (
-                <p className="text-xs text-text-muted">尚未完成 Agent 分析，请先运行「分析素材」。</p>
+                      <p className="text-xs text-text-muted">尚未完成 Agent 分析，请先运行「内容分析」。</p>
               ) : (
                 <>
                   {analysis.vision_status && analysis.vision_status !== 'vlm' ? (

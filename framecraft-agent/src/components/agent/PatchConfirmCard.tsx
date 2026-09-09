@@ -28,7 +28,7 @@ export default function PatchConfirmCard({ patch, onAccept, onDiscard }: PatchCo
             </p>
           </div>
         ))}
-        {!ops.length && <p className="text-xs text-text-muted">将重新生成预览与剪映草稿</p>}
+        {!ops.length && <p className="text-xs text-text-muted">将重新生成解说视频预览</p>}
       </div>
       {(onAccept || onDiscard) && (
         <div className="flex items-center gap-2 pt-1">

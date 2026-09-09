@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, Settings, Trash2, Sparkles, Play, FileJson, Layers, BookOpen } from 'lucide-react';  
+import { Zap, Settings, Trash2, Sparkles, Play, FileJson, Layers } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useStudioWorkflow } from '../../hooks/useStudioWorkflow';
 import { api } from '../../api/client';
@@ -29,29 +29,12 @@ export default function StudioLayout() {
     setSelectedAssetId, setShowAssetDrawer,
     generateHyperFramesProgress, generateDraftProgress,
     versions, currentVersionId, setCurrentVersionId, setPreviewUrl, setVersion, error,
-    projectId, activeJobId,
+    activeJobId, scriptText,
   } = useProjectStore();
-  const { startAnalyze } = useStudioWorkflow();
-  const [importGuideOpen, setImportGuideOpen] = useState(false);
-  const [importGuideText, setImportGuideText] = useState('');
-  const [importGuideLoading, setImportGuideLoading] = useState(false);
+  const { startAnalyze, saveScriptText } = useStudioWorkflow();
 
   const filteredAssets = filter === 'all' ? assets : assets.filter((a) => a.type === filter);
   const currentVersion = versions.find((v) => v.id === currentVersionId) || versions[0];
-
-  const openImportGuide = async () => {
-    if (!projectId || !currentVersion) return;
-    setImportGuideLoading(true);
-    setImportGuideOpen(true);
-    try {
-      const res = await api.getImportGuide(projectId, currentVersion.id);
-      setImportGuideText(res.content || '草稿导入说明尚未生成。');
-    } catch {
-      setImportGuideText('加载导入说明失败，请稍后重试。');
-    } finally {
-      setImportGuideLoading(false);
-    }
-  };
 
   const renderCenterPanel = () => {
     switch (step) {
@@ -59,7 +42,7 @@ export default function StudioLayout() {
         return (
           <div className="flex flex-col items-center gap-6 h-full justify-center">
             <StudioEmptyState />
-            {assets.length > 0 && (
+            {(assets.length > 0 || scriptText.trim()) && (
               <GradientButton size="lg" className="rounded-xl px-8" onClick={() => void startAnalyze()} disabled={Boolean(activeJobId)}>
                 <Play className="w-4 h-4" />
                 {activeJobId ? 'Agent 任务运行中' : '开始 AI 分析'}
@@ -79,7 +62,7 @@ export default function StudioLayout() {
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-semibold text-text-main flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-primary-light" />
-                    正在生成 HyperFrames 高级预览
+                    正在生成 HyperFrames 解说成片
                   </span>
                   <span className="text-xs text-primary-light font-mono">{generateHyperFramesProgress}%</span>
                 </div>
@@ -91,12 +74,12 @@ export default function StudioLayout() {
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-semibold text-text-main flex items-center gap-2">
                     <Zap className="w-4 h-4 text-secondary" />
-                    正在导出剪映草稿
+                    正在校验字幕、时间线与视觉细节
                   </span>
-                  <span className="text-xs text-secondary font-mono">{generateDraftProgress}%</span>
+                  <span className="text-xs text-secondary font-mono">{Math.max(generateDraftProgress, Math.round(generateHyperFramesProgress * 0.9))}%</span>
                 </div>
                 <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-secondary rounded-full transition-all duration-200" style={{ width: `${generateDraftProgress}%` }} />
+                  <div className="h-full bg-secondary rounded-full transition-all duration-200" style={{ width: `${Math.max(generateDraftProgress, Math.round(generateHyperFramesProgress * 0.9))}%` }} />
                 </div>
               </div>
             </div>
@@ -136,14 +119,9 @@ export default function StudioLayout() {
                     <DownloadResultCard title="完整视频" description="MP4 · HyperFrames 预览" icon={<Zap className="w-4 h-4 text-primary-light" />} badge="推荐" badgeVariant="primary" size="MP4" />
                   </a>
                 )}
-                {currentVersion.draft_url && (
-                  <a href={api.fileUrl(currentVersion.draft_url)} download>
-                    <DownloadResultCard title="草稿文件" description="剪映工程 zip" icon={<Sparkles className="w-4 h-4 text-secondary" />} badge="完整" badgeVariant="success" size="ZIP" />
-                  </a>
-                )}
                 {currentVersion.timeline_url && (
                   <a href={api.fileUrl(currentVersion.timeline_url)} download>
-                    <DownloadResultCard title="统一时间线" description="unified_timeline.json" icon={<FileJson className="w-4 h-4 text-accent" />} badge="JSON" badgeVariant="info" size="JSON" />
+                    <DownloadResultCard title="项目时间线" description="timeline.json" icon={<FileJson className="w-4 h-4 text-accent" />} badge="JSON" badgeVariant="info" size="JSON" />
                   </a>
                 )}
                 {currentVersion.hyperframes_url && (
@@ -160,11 +138,6 @@ export default function StudioLayout() {
                   <a href={api.fileUrl(currentVersion.cover_url)} download>
                     <DownloadResultCard title="封面图" description="PNG 封面" icon={<Sparkles className="w-4 h-4 text-accent" />} badge="新生成" badgeVariant="warning" size="PNG" />
                   </a>
-                )}
-                {currentVersion.draft_url && (
-                  <button type="button" onClick={() => void openImportGuide()} className="text-left">
-                    <DownloadResultCard title="草稿导入说明" description="剪映/CapCut 导入步骤" icon={<BookOpen className="w-4 h-4 text-secondary" />} badge="指南" badgeVariant="success" size="MD" />
-                  </button>
                 )}
               </div>
             )}
@@ -188,7 +161,7 @@ export default function StudioLayout() {
             <div className="w-8 h-8 rounded-lg bg-btn-gradient flex items-center justify-center">
               <Zap className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-bold text-text-main"><span className="gradient-text">帧造</span> Agent</span>
+            <span className="text-sm font-bold text-text-main"><span className="gradient-text">FrameCraft</span> Agent</span>
           </Link>
         </div>
         <StepProgress />
@@ -205,8 +178,20 @@ export default function StudioLayout() {
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <div className="w-[30%] border-r border-white/8 flex flex-col p-4 gap-4 overflow-hidden">
-          <span className="text-sm font-bold text-text-main">素材库</span>
+          <span className="text-sm font-bold text-text-main">输入与素材</span>
           <AssetUploadZone />
+          <div className="glass-card rounded-xl p-3 border border-white/8">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-text-main">讲稿文字</span>
+              <span className="text-[10px] text-text-muted">可选</span>
+            </div>
+            <textarea
+              value={scriptText}
+              onChange={(e) => void saveScriptText(e.target.value)}
+              placeholder="没有音频时可直接贴讲稿；有音频时也可以补充文字要求。"
+              className="w-full min-h-28 resize-y rounded-lg bg-white/5 border border-white/8 px-3 py-2 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:border-primary/40"
+            />
+          </div>
           <AssetFilterTabs />
           <div className="flex-1 overflow-y-auto space-y-2">
             {filteredAssets.map((asset) => (
@@ -222,24 +207,6 @@ export default function StudioLayout() {
       <BottomStatusBar />
       <ModelSettingsDrawer />
       <AssetDetailDrawer />
-      {importGuideOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setImportGuideOpen(false)} />
-          <div className="relative w-full max-w-lg glass-strong border border-white/10 rounded-2xl p-5 max-h-[80vh] overflow-hidden flex flex-col">
-            <h3 className="text-sm font-bold text-text-main mb-3">草稿导入说明</h3>
-            <div className="flex-1 overflow-y-auto text-xs text-text-secondary whitespace-pre-wrap leading-relaxed">
-              {importGuideLoading ? '加载中…' : importGuideText}
-            </div>
-            <button
-              type="button"
-              onClick={() => setImportGuideOpen(false)}
-              className="mt-4 px-4 py-2 rounded-lg text-xs border border-white/10 text-text-secondary hover:bg-white/5"
-            >
-              关闭
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

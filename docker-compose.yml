@@ -12,8 +12,10 @@ services:
       - ./config:/app/config
       - ./vendor:/app/vendor
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - FRAMECRAFT_RETENTION_HOURS=${FRAMECRAFT_RETENTION_HOURS:-24}
+      - FRAMECRAFT_RETENTION_ENABLED=${FRAMECRAFT_RETENTION_ENABLED:-1}
     restart: unless-stopped
 
   frontend:
@@ -28,6 +30,5 @@ services:
     restart: unless-stopped
 
 # 说明：
-# - HyperFrames 渲染依赖 Node>=22 + Chromium，VectCutAPI 草稿导出与剪映本机集成依赖
-#   Windows 宿主，容器内默认走 FFmpeg 兜底预览。完整高级预览/草稿请在 Windows 宿主运行。
+# - HyperFrames 渲染依赖 Node>=22 与 Chromium。渲染失败时任务直接失败，不生成 FFmpeg 兜底视频。
 # - 后端在进程内以线程池跑 JobRunner，无需独立 worker；如需横向扩展可拆分。

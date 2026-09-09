@@ -2,11 +2,11 @@ import React from 'react';
 import { Upload, Brain, Scissors, Eye, Download } from 'lucide-react';
 
 const STEPS = [
-  { icon: <Upload className="w-5 h-5" />, label: '上传素材', color: 'bg-primary/15 text-primary-light' },
-  { icon: <Brain className="w-5 h-5" />, label: 'AI 分析', color: 'bg-secondary/15 text-secondary' },
-  { icon: <Scissors className="w-5 h-5" />, label: '智能剪辑', color: 'bg-accent/15 text-accent' },
-  { icon: <Eye className="w-5 h-5" />, label: '生成预览', color: 'bg-warning/15 text-warning' },
-  { icon: <Download className="w-5 h-5" />, label: '导出草稿', color: 'bg-success/15 text-success' },
+  { icon: <Upload className="w-5 h-5" />, label: '上传音频 / 讲稿', color: 'bg-primary/15 text-primary-light' },
+  { icon: <Brain className="w-5 h-5" />, label: '内容分析', color: 'bg-secondary/15 text-secondary' },
+  { icon: <Scissors className="w-5 h-5" />, label: 'Agent 设计分镜', color: 'bg-accent/15 text-accent' },
+  { icon: <Eye className="w-5 h-5" />, label: 'HyperFrames 渲染', color: 'bg-warning/15 text-warning' },
+  { icon: <Download className="w-5 h-5" />, label: '导出成片与工程', color: 'bg-success/15 text-success' },
 ];
 
 export default function ProcessFlow() {

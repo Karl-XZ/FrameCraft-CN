@@ -49,10 +49,10 @@ export default function AssetUploadZone() {
         </div>
         <div className="text-center">
           <p className="text-sm text-text-secondary font-medium">
-            拖拽视频、图片或音频到这里
+            拖拽音频、图片或参考素材到这里
           </p>
           <p className="text-xs text-text-muted mt-1">
-            支持口播视频、B-roll、图片、BGM
+            推荐至少上传一条解说音频；没有音频也可以在下方讲稿区直接写文字
           </p>
         </div>
         <button

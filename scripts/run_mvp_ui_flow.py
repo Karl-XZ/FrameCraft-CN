@@ -1,194 +1,81 @@
-"""用 MVP 口播视频跑通工作台 UI 全流程：上传 → 分析 → 确认生成 → 等待成片。"""
+#!/usr/bin/env python3
+"""Run a real browser upload -> analyze -> generate -> download acceptance test."""
 from __future__ import annotations
 
-import json
-import sys
+import argparse
+import subprocess
 import time
-import traceback
-from datetime import datetime
 from pathlib import Path
 
-import httpx
-from playwright.sync_api import sync_playwright, TimeoutError as PwTimeout
+from playwright.sync_api import sync_playwright
+
 
 ROOT = Path(__file__).resolve().parents[1]
-VIDEO = ROOT / "fixtures" / "mvp_source.mp4"
-API = "http://127.0.0.1:8000"
-STUDIO = "http://127.0.0.1:5173/studio"
-LOG_DIR = ROOT / "outputs" / "mvp_e2e_logs"
-API_KEY = "sk-f4fa1e490f78469eb4433266814d28d2"
-
-MODEL = {
-    "provider": "openai",
-    "api_key": API_KEY,
-    "text_model": "qwen-max",
-    "vision_model": "qwen-vl-max",
-    "asr_model": "faster-whisper-base",
-    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-}
 
 
-def log(msg: str, lines: list[str]) -> None:
-    line = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
-    print(line, flush=True)
-    lines.append(line)
+def probe(video: Path) -> str:
+    return subprocess.check_output(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration,size", "-of", "json", str(video)],
+        text=True,
+    ).strip()
 
 
-def wait_job(client: httpx.Client, job_id: str, lines: list[str], timeout: int = 3600) -> dict:
-    deadline = time.time() + timeout
-    last = ""
-    while time.time() < deadline:
-        r = client.get(f"{API}/api/jobs/{job_id}")
-        r.raise_for_status()
-        job = r.json()
-        step = f"{job['status']} {job['progress']:.0f}% — {job.get('current_step') or ''}"
-        if step != last:
-            log(f"  job {job_id}: {step}", lines)
-            last = step
-        if job["status"] == "completed":
-            return job
-        if job["status"] == "failed":
-            raise RuntimeError(job.get("error_message") or "job failed")
-        time.sleep(3)
-    raise TimeoutError(f"job {job_id} timeout after {timeout}s")
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("audio", type=Path)
+    parser.add_argument("--studio", default="http://127.0.0.1:5174")
+    parser.add_argument("--token-file", type=Path, default=ROOT / "backend/storage/access_token.txt")
+    parser.add_argument("--output", type=Path, default=ROOT / "benchmark-results/ui-downloaded-preview.mp4")
+    args = parser.parse_args()
+    if not args.audio.is_file():
+        raise FileNotFoundError(args.audio)
+    token = args.token_file.read_text(encoding="utf-8").strip()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
 
+    started = time.perf_counter()
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(accept_downloads=True)
+        page.goto(f"{args.studio.rstrip('/')}/projects/new?access_token={token}", wait_until="networkidle")
+        page.locator('input[placeholder*="AI 产业观点"]').fill("openJiuwen 网页端真实60秒验收")
+        page.locator("select").nth(0).select_option("16:9")
+        page.get_by_role("button", name="创建并进入工作台").click()
+        page.wait_for_url("**/studio?project=**", timeout=30_000)
+        page.wait_for_load_state("networkidle")
 
-def configure_model(client: httpx.Client, lines: list[str]) -> None:
-    health = client.get(f"{API}/api/health").json()
-    assert health.get("status") == "ok", health
-    log(f"健康检查 OK openclaw={health.get('openclaw')}", lines)
-    client.patch(f"{API}/api/settings/model", json=MODEL).raise_for_status()
-    log("已配置 Qwen API Key", lines)
-
-
-def wait_edit_plan(client: httpx.Client, project_id: str, lines: list[str], timeout: int = 3600) -> dict:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        r = client.get(f"{API}/api/projects/{project_id}/edit-plan")
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("hook") or data.get("video_concept"):
-                log("剪辑方案已就绪", lines)
-                return data
-        time.sleep(5)
-    raise TimeoutError("等待剪辑方案超时")
-
-
-def ui_workflow(project_id: str, lines: list[str]) -> None:
-    if not VIDEO.is_file():
-        raise FileNotFoundError(VIDEO)
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        url = f"{STUDIO}?project={project_id}"
-        log(f"打开工作台 {url}", lines)
-        page.goto(url, wait_until="networkidle", timeout=120_000)
-
-        log("点击「选择文件」并上传口播视频", lines)
-        page.get_by_role("button", name="选择文件").click()
-        page.locator('input[type="file"]').set_input_files(str(VIDEO))
-        page.wait_for_timeout(3000)
-        page.get_by_text("口播视频", exact=False).first.wait_for(timeout=120_000)
-        log("素材已出现在素材库", lines)
-
-        log("点击「开始 AI 分析」", lines)
-        page.get_by_role("button", name="开始 AI 分析").click()
-
-        log("等待剪辑方案页…", lines)
-        page.get_by_role("button", name="确认生成").wait_for(timeout=3_600_000)
-
-        log("点击「确认生成」", lines)
         with page.expect_response(
-            lambda r: "/generate" in r.url and r.request.method == "POST",
-            timeout=3_600_000,
-        ) as resp_info:
-            page.get_by_role("button", name="确认生成").click()
-        gen_job = resp_info.value.json()
-        log(f"生成任务已提交 job_id={gen_job['id']}", lines)
+            lambda response: "/assets/upload" in response.url and response.request.method == "POST",
+            timeout=120_000,
+        ) as upload_info:
+            page.locator('input[type="file"]').set_input_files(str(args.audio.resolve()))
+        if not upload_info.value.ok:
+            raise RuntimeError(f"upload failed: {upload_info.value.status} {upload_info.value.text()}")
+        page.get_by_text("已上传", exact=True).wait_for(timeout=30_000)
+        upload_seconds = time.perf_counter() - started
+        print(f"upload_ready_seconds={upload_seconds:.2f}", flush=True)
+
+        page.get_by_role("button", name="开始 AI 分析").click()
+        page.get_by_role("button", name="确认生成").wait_for(timeout=300_000)
+        analyze_seconds = time.perf_counter() - started - upload_seconds
+        print(f"analysis_seconds={analyze_seconds:.2f}", flush=True)
+
+        page.get_by_role("button", name="确认生成").click()
+        page.get_by_text("完整视频", exact=True).wait_for(timeout=300_000)
+        generate_seconds = time.perf_counter() - started - upload_seconds - analyze_seconds
+        print(f"generation_seconds={generate_seconds:.2f}", flush=True)
+
+        with page.expect_download(timeout=60_000) as download_info:
+            page.locator('a[download]').first.click()
+        download_info.value.save_as(args.output)
         browser.close()
-        return gen_job["id"]
 
-
-def run_once(attempt: int) -> tuple[bool, list[str]]:
-    lines: list[str] = []
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log(f"===== 第 {attempt} 次尝试 =====", lines)
-    project_id = ""
-    try:
-        with httpx.Client(timeout=300) as client:
-            configure_model(client, lines)
-
-            log("创建新项目", lines)
-            project = client.post(
-                f"{API}/api/projects",
-                json={
-                    "name": f"MVP口播测试-{datetime.now().strftime('%m%d-%H%M')}",
-                    "aspect_ratio": "9:16",
-                    "target_duration": 60,
-                    "target_style": "modern_talking_head",
-                    "output_language": "zh",
-                    "generate_draft": True,
-                    "keep_hyperframes": True,
-                },
-            ).json()
-            project_id = project["id"]
-            log(f"project_id={project_id}", lines)
-
-            gen_id = ui_workflow(project_id, lines)
-
-            log("等待生成任务完成", lines)
-            wait_job(client, gen_id, lines, timeout=3600)
-
-            versions = client.get(f"{API}/api/projects/{project_id}/versions").json()
-            if not versions:
-                raise RuntimeError("无成片版本")
-            v = versions[0]
-            log(
-                f"成功！版本 v{v['version_number']}.0 preview={bool(v.get('preview_url'))} draft={bool(v.get('draft_url'))}",
-                lines,
-            )
-
-            report = {
-                "success": True,
-                "project_id": project_id,
-                "version": v,
-                "attempt": attempt,
-            }
-            out = LOG_DIR / f"success_{project_id}.json"
-            out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-            (LOG_DIR / f"run_{attempt}.log").write_text("\n".join(lines), encoding="utf-8")
-            return True, lines
-
-    except Exception as exc:
-        log(f"失败: {exc}", lines)
-        log(traceback.format_exc(), lines)
-        fail = {
-            "success": False,
-            "project_id": project_id,
-            "error": str(exc),
-            "traceback": traceback.format_exc(),
-            "attempt": attempt,
-        }
-        (LOG_DIR / f"fail_attempt_{attempt}.json").write_text(
-            json.dumps(fail, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        (LOG_DIR / f"run_{attempt}.log").write_text("\n".join(lines), encoding="utf-8")
-        return False, lines
-
-
-def main() -> int:
-    max_attempts = 3
-    for i in range(1, max_attempts + 1):
-        ok, _ = run_once(i)
-        if ok:
-            print("\n=== MVP 全流程跑通 ===")
-            return 0
-        if i < max_attempts:
-            print(f"\n等待 15s 后重试 ({i}/{max_attempts})...")
-            time.sleep(15)
-    print("\n=== 多次尝试后仍失败，见 outputs/mvp_e2e_logs ===")
-    return 1
+    total_seconds = time.perf_counter() - started
+    if total_seconds >= 300:
+        raise RuntimeError(f"browser flow exceeded five minutes: {total_seconds:.2f}s")
+    print(f"total_seconds={total_seconds:.2f}")
+    print(f"download={args.output}")
+    print(probe(args.output))
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

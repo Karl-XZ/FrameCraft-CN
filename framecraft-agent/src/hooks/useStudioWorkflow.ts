@@ -29,10 +29,11 @@ export function useStudioWorkflow() {
   const ensureProject = useCallback(async () => {
     if (store.projectId) return store.projectId;
     const p = await api.createProject({
-      name: '帧造 Agent 项目',
+      name: 'Agent 解说项目',
       aspect_ratio: store.videoRatio,
       target_duration: store.targetDuration,
       target_style: store.targetStyle,
+      script_text: store.scriptText,
       output_language: store.outputLanguage,
       generate_draft: store.generateDraft,
       keep_hyperframes: store.keepHyperframes,
@@ -50,7 +51,7 @@ export function useStudioWorkflow() {
       duration: formatDuration(a.duration),
       size: formatSize(a.size),
       note: a.user_note,
-      status: a.analysis_status === 'completed' ? '分析完成' : a.analysis_status === 'transcribed' ? '已转录' : '已上传',
+      status: a.analysis_status === 'completed' ? '分析完成' : a.analysis_status === 'transcribed' ? '已转写' : '已上传',
       thumbnail: a.thumbnail_url ? api.fileUrl(a.thumbnail_url) : undefined,
       mustUse: a.must_use,
       priority: a.priority,
@@ -66,6 +67,7 @@ export function useStudioWorkflow() {
     store.setTargetDuration(p.target_duration);
     store.setTargetStyle(p.target_style);
     if (p.output_language) store.setOutputLanguage(p.output_language);
+    if (typeof p.script_text === 'string') store.setScriptText(p.script_text);
     if (typeof p.generate_draft === 'boolean') store.setGenerateDraft(p.generate_draft);
     if (typeof p.keep_hyperframes === 'boolean') store.setKeepHyperframes(p.keep_hyperframes);
     await refreshAssets(projectId);
@@ -129,15 +131,13 @@ export function useStudioWorkflow() {
       const projectId = await ensureProject();
       for (const file of Array.from(files)) {
         const label =
-          file.type.startsWith('video') && !store.assets.some((a) => a.type === '口播视频')
-            ? '口播视频'
-            : file.type.startsWith('audio')
-              ? '音频'
-              : file.type.startsWith('image')
-                ? file.name.toLowerCase().includes('logo')
-                  ? 'LOGO'
-                  : '图片'
-                : 'B-roll';
+          file.type.startsWith('audio')
+            ? '音频'
+            : file.type.startsWith('image')
+              ? '图片'
+              : /\.(txt|md|markdown)$/i.test(file.name)
+                ? '讲稿'
+                : '素材';
         await api.uploadAsset(projectId, file, label, '');
       }
       await refreshAssets(projectId);
@@ -242,9 +242,12 @@ export function useStudioWorkflow() {
 
   const startAnalyze = useCallback(async () => {
     const projectId = await ensureProject();
-    if (store.assets.length === 0) {
-      store.setError('请先上传至少一个素材');
+    if (store.assets.length === 0 && !store.scriptText.trim()) {
+      store.setError('请先上传一条解说音频，或填写讲稿文字');
       return;
+    }
+    if (store.scriptText.trim()) {
+      await api.putScript(projectId, store.scriptText);
     }
     store.setStep('analyze');
     store.setOverallProgress(0);
@@ -271,6 +274,9 @@ export function useStudioWorkflow() {
   const startGenerate = useCallback(async () => {
     const projectId = store.projectId;
     if (!projectId) return;
+    if (store.scriptText.trim()) {
+      await api.putScript(projectId, store.scriptText);
+    }
     store.setStep('generate');
     store.setGenerateHyperFramesProgress(0);
     store.setGenerateDraftProgress(0);
@@ -368,13 +374,20 @@ export function useStudioWorkflow() {
         store.addChatMessage({
           id: crypto.randomUUID(),
           role: 'agent',
-          text: `对话请求失败：${msg}\n\n请确认新版后端已启动，并且本机 Agent 已登录可用。`,
+          text: `对话请求失败：${msg}\n\n请确认新版后端已启动，并且 DeepSeek API Key 配置正确。`,
           timestamp: Date.now(),
         });
       }
     },
     [ensureProject, refreshChat, refreshVersions, store, watchJob]
   );
+
+  const saveScriptText = useCallback(async (text: string) => {
+    store.setScriptText(text);
+    if (store.projectId) {
+      await api.putScript(store.projectId, text);
+    }
+  }, [store]);
 
   // 接受修改方案：应用 patch 并重新生成
   const acceptPatch = useCallback(async () => {
@@ -386,7 +399,7 @@ export function useStudioWorkflow() {
     store.setGenerateHyperFramesProgress(0);
     store.setGenerateDraftProgress(0);
     const job = await api.applyPatch(projectId, patch);
-    store.addChatMessage({ id: crypto.randomUUID(), role: 'agent', text: '已接受修改，正在重新生成预览与剪映草稿…', timestamp: Date.now() });
+    store.addChatMessage({ id: crypto.randomUUID(), role: 'agent', text: '已接受修改，正在重新生成解说视频预览…', timestamp: Date.now() });
     watchJob(job.id, afterRegenerate(projectId, '修改已应用并重新生成'));
   }, [afterRegenerate, store, watchJob]);
 
@@ -421,6 +434,7 @@ export function useStudioWorkflow() {
     acceptPatch,
     discardPatch,
     revertToPreviousVersion,
+    saveScriptText,
     refreshAssets,
     persistAsset,
   };

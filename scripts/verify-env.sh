@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-echo "=== FrameCraft Agent Env Check ==="
+echo "=== FrameCraft openJiuwen Env Check ==="
 echo "Root: $ROOT"
 echo
 
@@ -30,18 +30,17 @@ else
   echo "MISS npm/bun"
 fi
 
-if [[ -x backend/venv/bin/python ]]; then
-  echo "OK  backend venv"
+if [[ -x backend/venv-openjiuwen/bin/python ]]; then
+  echo "OK  backend openJiuwen venv"
+  backend/venv-openjiuwen/bin/python -c "import openjiuwen; print('OK  openJiuwen import')"
 else
-  echo "MISS backend venv"
+  echo "MISS backend/venv-openjiuwen"
 fi
 
-if [[ -f node_modules/hyperframes/dist/cli.js ]]; then
-  echo "OK  hyperframes CLI"
-elif [[ -f hyperframes-student-kit/node_modules/hyperframes/dist/cli.js ]]; then
-  echo "OK  hyperframes CLI (student kit)"
+if [[ -d ../hyperframes ]]; then
+  echo "OK  hyperframes repo -> $(cd ../hyperframes && pwd)"
 else
-  echo "MISS hyperframes CLI"
+  echo "MISS hyperframes repo"
 fi
 
 for cmd in ffmpeg ffprobe; do
@@ -52,12 +51,10 @@ for cmd in ffmpeg ffprobe; do
   fi
 done
 
-if command -v codex >/dev/null 2>&1; then
-  echo "OK  codex $(codex --version)"
-elif [[ -x /Applications/Codex.app/Contents/Resources/codex ]]; then
-  echo "OK  codex $(/Applications/Codex.app/Contents/Resources/codex --version)"
+if [[ -n "${DEEPSEEK_API_KEY:-}" ]]; then
+  echo "OK  DEEPSEEK_API_KEY is set"
 else
-  echo "MISS codex"
+  echo "WARN DEEPSEEK_API_KEY not set"
 fi
 
 echo

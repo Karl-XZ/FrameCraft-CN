@@ -5,9 +5,11 @@ import StudioPage from './pages/StudioPage';
 import ProjectsPage from './pages/ProjectsPage';
 import NewProjectPage from './pages/NewProjectPage';
 
+const routerBase = import.meta.env.BASE_URL.replace(/\/+$/, '') || '/';
+
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={routerBase === '/' ? undefined : routerBase}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/projects" element={<ProjectsPage />} />

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FrameCraft Agent — 单 Codex agent 新后端依赖安装（macOS/Linux）
+# FrameCraft openJiuwen 多 Agent 依赖安装（macOS/Linux）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -30,17 +30,21 @@ ensure_node_pm() {
 }
 
 PM="$(ensure_node_pm)"
-need_cmd python3
+PYTHON_BIN="${FRAMECRAFT_PYTHON:-python3.11}"
+need_cmd "$PYTHON_BIN"
 
 say "Backend Python venv"
-if [[ ! -x backend/venv/bin/python ]]; then
-  python3 -m venv backend/venv
+if [[ ! -x backend/venv-openjiuwen/bin/python ]]; then
+  "$PYTHON_BIN" -m venv backend/venv-openjiuwen
 fi
-backend/venv/bin/python -m pip install -q --upgrade pip
-backend/venv/bin/python -m pip install -q -r backend/requirements.txt
-PYTHONPATH=backend backend/venv/bin/python -c "import app.main; print('OK single-agent backend deps')"
+backend/venv-openjiuwen/bin/python -m pip install -q --upgrade pip
+backend/venv-openjiuwen/bin/python -m pip install -q -r backend/requirements.txt
+if [[ "${FRAMECRAFT_SKIP_PLAYWRIGHT_INSTALL:-0}" != "1" ]]; then
+  backend/venv-openjiuwen/bin/python -m playwright install chromium
+fi
+PYTHONPATH=backend backend/venv-openjiuwen/bin/python -c "import app.main; print('OK openJiuwen multi-agent backend deps')"
 
-say "Node / HyperFrames deps"
+say "Frontend deps"
 if [[ "$PM" == "npm" ]]; then
   npm install
   (cd framecraft-agent && npm install)
@@ -49,13 +53,22 @@ else
   (cd framecraft-agent && bun install)
 fi
 
-say "Codex CLI"
-if command -v codex >/dev/null 2>&1; then
-  codex --version
-elif [[ -x /Applications/Codex.app/Contents/Resources/codex ]]; then
-  /Applications/Codex.app/Contents/Resources/codex --version
+say "HyperFrames doctor"
+if [[ "${FRAMECRAFT_SKIP_HYPERFRAMES_DOCTOR:-0}" == "1" ]]; then
+  echo "SKIP hyperframes doctor"
+elif [[ -x "$ROOT/node_modules/.bin/hyperframes" ]]; then
+  (cd "$ROOT/../hyperframes" && "$ROOT/node_modules/.bin/hyperframes" doctor --json || true)
+elif command -v npx >/dev/null 2>&1; then
+  (cd "$ROOT/../hyperframes" && npx hyperframes doctor --json || true)
 else
-  echo "WARN Codex CLI not found. Set CODEX_BIN or install Codex app." >&2
+  echo "WARN npx not found; skip hyperframes doctor" >&2
+fi
+
+say "DeepSeek config"
+if [[ -n "${DEEPSEEK_API_KEY:-}" ]]; then
+  echo "DEEPSEEK_API_KEY detected"
+else
+  echo "WARN DEEPSEEK_API_KEY not set. You can still save the key later in the web UI." >&2
 fi
 
 say "Done"

@@ -10,7 +10,6 @@ const STATUS_LABEL: Record<string, string> = {
   planning: '规划中',
   rendering: '渲染中',
   chatting: 'Agent 对话中',
-  exporting_draft: '导出草稿',
   completed: '已完成',
   needs_input: '等待补充',
   failed: '失败',
@@ -58,7 +57,7 @@ export default function ProjectsPage() {
             <Zap className="w-5 h-5 text-white" />
           </div>
           <span className="text-2xl font-extrabold tracking-tight">
-            <span className="gradient-text">帧造</span>
+            <span className="gradient-text">FrameCraft</span>
             <span className="text-text-main"> Agent</span>
           </span>
         </Link>

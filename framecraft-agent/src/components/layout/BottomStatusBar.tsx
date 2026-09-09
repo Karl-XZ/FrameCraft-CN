@@ -9,7 +9,6 @@ export default function BottomStatusBar() {
     overallProgress,
     version,
     generateHyperFramesProgress,
-    generateDraftProgress,
     step,
     versions,
     currentVersionId,
@@ -17,7 +16,7 @@ export default function BottomStatusBar() {
   const currentVersion = versions.find((v) => v.id === currentVersionId) || versions[0];
 
   const progress = step === 'generate'
-    ? Math.round((generateHyperFramesProgress + generateDraftProgress) / 2)
+    ? Math.round(generateHyperFramesProgress)
     : step === 'analyze' ? overallProgress : step === 'result' ? 100 : 0;
 
   return (
@@ -57,19 +56,10 @@ export default function BottomStatusBar() {
             <FileVideo className="w-3.5 h-3.5" />
             视频文件
           </a>
-          <a
-            href={currentVersion?.draft_url ? api.fileUrl(currentVersion.draft_url) : undefined}
-            download
-            aria-disabled={!currentVersion?.draft_url}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-white/8 text-xs transition-all ${
-              currentVersion?.draft_url
-                ? 'bg-white/5 hover:bg-white/10 text-text-secondary hover:text-text-main'
-                : 'bg-white/[0.02] text-text-muted/50 pointer-events-none'
-            }`}
-          >
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-white/8 text-xs bg-white/[0.02] text-text-muted/60">
             <Zap className="w-3.5 h-3.5" />
-            草稿文件
-          </a>
+            无草稿导出
+          </div>
         </div>
       </div>
     </div>

@@ -3,11 +3,11 @@ import { Check, Loader2, Circle } from 'lucide-react';
 import { useProjectStore, Step } from '../../store/projectStore';
 
 const STEPS: { key: Step; label: string }[] = [
-  { key: 'upload', label: '上传素材' },
-  { key: 'analyze', label: 'AI 分析' },
-  { key: 'plan', label: '剪辑方案' },
+  { key: 'upload', label: '上传音频/讲稿' },
+  { key: 'analyze', label: '内容分析' },
+  { key: 'plan', label: '视频方案' },
   { key: 'generate', label: '生成视频' },
-  { key: 'result', label: '导出修改' },
+  { key: 'result', label: '成片与改片' },
 ];
 
 export default function StepProgress() {

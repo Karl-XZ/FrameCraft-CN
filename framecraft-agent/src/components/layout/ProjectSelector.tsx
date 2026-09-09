@@ -12,10 +12,10 @@ const STATUS_LABEL: Record<string, string> = {
   planning: '规划中',
   rendering: '渲染中',
   chatting: 'Agent 对话中',
-  exporting_draft: '导出草稿',
   completed: '已完成',
   failed: '失败',
   cancelled: '已取消',
+  needs_input: '等待补充',
 };
 
 function formatTime(iso?: string) {

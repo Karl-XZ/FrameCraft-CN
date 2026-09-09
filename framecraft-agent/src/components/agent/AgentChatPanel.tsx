@@ -9,7 +9,7 @@ import { useStudioWorkflow } from '../../hooks/useStudioWorkflow';
 
 const EMPTY_CHAT_HINT = `在下方输入消息，与 Agent 对话。
 
-支持：调整剪辑节奏、修改字幕、替换 B-roll、调节 BGM 等。生成成片后可提出改片需求。`;
+支持：调整解说节奏、修改字幕、加强图表动画、替换素材、调节音乐等。生成成片后可继续提出改片需求。`;
 
 export default function AgentChatPanel() {
   const [input, setInput] = useState('');

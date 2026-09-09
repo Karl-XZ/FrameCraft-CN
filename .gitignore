@@ -19,6 +19,7 @@ vendor/*/venv*/
 vendor/asr-venv/
 vendor/hf-smoke-test/
 backend/venv/
+backend/venv-openjiuwen/
 backend/*.db
 *.db
 framecraft-agent/node_modules/

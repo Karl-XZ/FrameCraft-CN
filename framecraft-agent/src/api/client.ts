@@ -1,18 +1,50 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 const TOKEN_STORAGE_KEY = 'framecraft_access_token';
+let volatileAccessToken = '';
+
+function getStorage(): Storage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    if (!('localStorage' in window) || !window.localStorage) return null;
+    const probeKey = '__framecraft_storage_probe__';
+    window.localStorage.setItem(probeKey, '1');
+    window.localStorage.removeItem(probeKey);
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function persistAccessToken(token: string) {
+  volatileAccessToken = token.trim();
+  const storage = getStorage();
+  if (!storage || !volatileAccessToken) return;
+  try {
+    storage.setItem(TOKEN_STORAGE_KEY, volatileAccessToken);
+  } catch {
+    /* ignore storage write errors */
+  }
+}
 
 function readAccessToken() {
   if (typeof window === 'undefined') return '';
   const url = new URL(window.location.href);
   const fromUrl = url.searchParams.get('access_token') || url.searchParams.get('framecraft_token');
   if (fromUrl) {
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, fromUrl);
+    persistAccessToken(fromUrl);
     url.searchParams.delete('access_token');
     url.searchParams.delete('framecraft_token');
     window.history.replaceState(null, '', url.toString());
     return fromUrl;
   }
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY) || '';
+  if (volatileAccessToken) return volatileAccessToken;
+  const storage = getStorage();
+  if (!storage) return '';
+  try {
+    return storage.getItem(TOKEN_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
 }
 
 function requestAccessToken() {
@@ -20,7 +52,7 @@ function requestAccessToken() {
   if (existing || typeof window === 'undefined') return existing;
   const token = window.prompt('请输入 FrameCraft 访问口令');
   if (token?.trim()) {
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, token.trim());
+    persistAccessToken(token);
     return token.trim();
   }
   return '';
@@ -76,6 +108,7 @@ export interface BackendProject {
   target_style: string;
   target_duration: number;
   output_language?: string;
+  script_text?: string;
   generate_draft?: boolean;
   keep_hyperframes?: boolean;
   current_version_id: string | null;
@@ -179,6 +212,7 @@ export interface CreateProjectBody {
   target_duration?: number;
   target_style?: string;
   output_language?: string;
+  script_text?: string;
   generate_draft?: boolean;
   keep_hyperframes?: boolean;
 }
@@ -193,9 +227,10 @@ export const api = {
         name: body.name,
         aspect_ratio: body.aspect_ratio || '9:16',
         target_duration: body.target_duration || 60,
-        target_style: body.target_style || 'modern_talking_head',
+        target_style: body.target_style || 'faceless_explainer',
+        script_text: body.script_text || '',
         output_language: body.output_language || 'zh',
-        generate_draft: body.generate_draft ?? true,
+        generate_draft: body.generate_draft ?? false,
         keep_hyperframes: body.keep_hyperframes ?? true,
       }),
     }),
@@ -203,6 +238,13 @@ export const api = {
   deleteProject: (projectId: string) => request(`/api/projects/${projectId}`, { method: 'DELETE' }),
   listProjects: () => request<BackendProject[]>('/api/projects'),
   listAssets: (projectId: string) => request<BackendAsset[]>(`/api/projects/${projectId}/assets`),
+  getScript: (projectId: string) => request<{ text: string }>(`/api/projects/${projectId}/script`),
+  putScript: (projectId: string, text: string) =>
+    request<BackendProject>(`/api/projects/${projectId}/script`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }),
   uploadAsset: async (projectId: string, file: File, user_label = '', user_note = '') => {
     const fd = new FormData();
     fd.append('file', file);
@@ -290,11 +332,8 @@ export function formatDuration(sec: number | null | undefined) {
 }
 
 export function mapAssetType(label: string, fileType: string): import('../store/projectStore').Asset['type'] {
-  if (label.includes('口播') || label === '口播视频') return '口播视频';
-  if (label.includes('B-roll') || label === 'B-roll') return 'B-roll';
-  if (label.toUpperCase().includes('LOGO') || label === 'LOGO') return 'LOGO';
   if (fileType === 'audio' || label === '音频') return '音频';
+  if (/\.(txt|md|markdown)$/i.test(label) || label === '讲稿') return '讲稿';
   if (fileType === 'image') return '图片';
-  if (fileType === 'video') return 'B-roll';
-  return 'B-roll';
+  return '素材';
 }

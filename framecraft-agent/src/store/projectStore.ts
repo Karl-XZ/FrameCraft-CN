@@ -2,16 +2,16 @@ import { create } from 'zustand';
 import type { BackendVersion, EditPlan } from '../api/client';
 
 export type Step = 'upload' | 'analyze' | 'plan' | 'generate' | 'result';
-export type AssetType = 'all' | '口播视频' | 'B-roll' | '图片' | '音频' | 'LOGO';
+export type AssetType = 'all' | '音频' | '讲稿' | '图片' | '素材';
 
 export interface Asset {
   id: string;
   filename: string;
-  type: '口播视频' | 'B-roll' | '图片' | '音频' | 'LOGO';
+  type: '音频' | '讲稿' | '图片' | '素材';
   duration?: string;
   size: string;
   note: string;
-  status: '已转录' | '待分析' | '已上传' | '分析完成';
+  status: '已转写' | '待分析' | '已上传' | '分析完成';
   thumbnail?: string;
   mustUse: boolean;
   priority: number;
@@ -43,6 +43,7 @@ interface ProjectState {
   targetDuration: number;
   targetStyle: string;
   outputLanguage: string;
+  scriptText: string;
   generateDraft: boolean;
   keepHyperframes: boolean;
   draftTarget: string;
@@ -86,6 +87,7 @@ interface ProjectState {
   setTargetDuration: (v: number) => void;
   setTargetStyle: (v: string) => void;
   setOutputLanguage: (v: string) => void;
+  setScriptText: (v: string) => void;
   setGenerateDraft: (v: boolean) => void;
   setKeepHyperframes: (v: boolean) => void;
   setDraftTarget: (v: string) => void;
@@ -121,17 +123,18 @@ export const useProjectStore = create<ProjectState>((set) => ({
   showSettingsDrawer: false,
   showAssetDrawer: false,
   selectedAssetId: null,
-  modelProvider: 'openai',
+  modelProvider: 'deepseek',
   apiKey: '',
   videoRatio: '9:16',
   videoResolution: '1080p正式导出',
   frameRate: 30,
   targetDuration: 60,
-  targetStyle: 'modern_talking_head',
+  targetStyle: 'faceless_explainer',
   outputLanguage: 'zh',
-  generateDraft: true,
+  scriptText: '',
+  generateDraft: false,
   keepHyperframes: true,
-  draftTarget: '剪映兼容草稿',
+  draftTarget: '不导出草稿',
   overallProgress: 0,
   currentAnalyzeTask: '等待开始',
   analyzeCompletedSteps: [],
@@ -172,6 +175,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
   setTargetDuration: (v) => set({ targetDuration: v }),
   setTargetStyle: (v) => set({ targetStyle: v }),
   setOutputLanguage: (v) => set({ outputLanguage: v }),
+  setScriptText: (v) => set({ scriptText: v }),
   setGenerateDraft: (v) => set({ generateDraft: v }),
   setKeepHyperframes: (v) => set({ keepHyperframes: v }),
   setDraftTarget: (v) => set({ draftTarget: v }),
@@ -218,5 +222,6 @@ export const useProjectStore = create<ProjectState>((set) => ({
       planProgress: 0,
       planSubstep: null,
       taskText: '准备就绪',
+      scriptText: '',
     }),
 }));

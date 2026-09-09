@@ -5,15 +5,12 @@ import { api } from '../../api/client';
 
 const RATIOS = ['9:16', '16:9', '1:1'];
 const RESOLUTIONS = ['720p快速预览', '1080p正式导出', '4K旗舰版'];
-const DRAFT_TARGETS = ['CapCut International', '剪映兼容草稿'];
+const DRAFT_TARGETS = ['不导出草稿'];
 
 type ProviderOption = { id: string; label: string; base_url: string };
 
 const PROVIDER_DEFAULTS: Record<string, { text_model: string; vision_model: string }> = {
-  codex: { text_model: '本机 Agent 当前配置', vision_model: '本机 Agent 当前配置' },
-  qwen: { text_model: 'qwen-max', vision_model: 'qwen-vl-max' },
-  deepseek: { text_model: 'deepseek-chat', vision_model: 'gpt-4o-mini' },
-  openai: { text_model: 'gpt-4o-mini', vision_model: 'gpt-4o-mini' },
+  deepseek: { text_model: 'deepseek-v4-flash', vision_model: 'deepseek-v4-flash-vision-exp' },
 };
 
 export default function ModelSettingsDrawer() {
@@ -29,10 +26,12 @@ export default function ModelSettingsDrawer() {
   } = useProjectStore();
 
   const [providers, setProviders] = useState<ProviderOption[]>([]);
-  const [textModel, setTextModel] = useState('qwen-max');
-  const [visionModel, setVisionModel] = useState('qwen-vl-max');
-  const [baseUrl, setBaseUrl] = useState('https://dashscope.aliyuncs.com/compatible-mode/v1');
-  const [providerId, setProviderId] = useState('qwen');
+  const [textModel, setTextModel] = useState('deepseek-v4-flash');
+  const [visionModel, setVisionModel] = useState('deepseek-v4-flash-vision-exp');
+  const [baseUrl, setBaseUrl] = useState('https://api.deepseek.com');
+  const [providerId, setProviderId] = useState('deepseek');
+  const [ttsModel, setTtsModel] = useState('edge-tts');
+  const [ttsVoice, setTtsVoice] = useState('zh-CN-XiaoxiaoNeural');
 
   useEffect(() => {
     if (!showSettingsDrawer) return;
@@ -45,13 +44,15 @@ export default function ModelSettingsDrawer() {
           base_url: String((value as Record<string, unknown>).base_url || ''),
         })));
       setProviders(list);
-      const pid = (s.provider as string) || 'codex';
+      const pid = (s.provider as string) || 'deepseek';
       setProviderId(pid);
       const match = list.find((p) => p.id === pid);
       setModelProvider(match?.label || pid);
       if (s.api_key) setApiKey(s.api_key);
       if (s.text_model) setTextModel(s.text_model);
       if (s.vision_model) setVisionModel(s.vision_model);
+      if (s.tts_model) setTtsModel(s.tts_model);
+      if (s.tts_voice) setTtsVoice(s.tts_voice);
       if (s.base_url) setBaseUrl(s.base_url);
       else if (match?.base_url) setBaseUrl(match.base_url);
     });
@@ -59,9 +60,7 @@ export default function ModelSettingsDrawer() {
 
   const providerButtons = useMemo(
     () => (providers.length ? providers : [
-      { id: 'codex', label: '本机 Agent', base_url: '' },
-      { id: 'qwen', label: 'Qwen / DashScope', base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
-      { id: 'openai', label: 'OpenAI', base_url: 'https://api.openai.com/v1' },
+      { id: 'deepseek', label: 'DeepSeek', base_url: 'https://api.deepseek.com' },
     ]),
     [providers],
   );
@@ -83,7 +82,9 @@ export default function ModelSettingsDrawer() {
       api_key: apiKey,
       text_model: textModel,
       vision_model: visionModel,
-      asr_model: 'base',
+      asr_model: 'whisper-small',
+      tts_model: ttsModel,
+      tts_voice: ttsVoice,
       base_url: baseUrl,
     });
     setShowSettingsDrawer(false);
@@ -145,7 +146,7 @@ export default function ModelSettingsDrawer() {
               className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/8 text-xs text-text-main font-mono focus:outline-none focus:border-primary/40"
             />
             <p className="text-xs text-text-muted">
-              新版后端使用本机 Agent 运行时；这里保留 Base URL 仅用于兼容旧设置，不参与视频 agent 调度。
+              后端通过 openJiuwen 多 Agent 团队调用 DeepSeek OpenAI 兼容接口。默认地址为 `https://api.deepseek.com`。
             </p>
           </div>
 
@@ -168,6 +169,25 @@ export default function ModelSettingsDrawer() {
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="text-xs text-text-muted">TTS 模型</label>
+              <input
+                value={ttsModel}
+                onChange={(e) => setTtsModel(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/8 text-sm text-text-main focus:outline-none focus:border-primary/40"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-text-muted">TTS 音色</label>
+              <input
+                value={ttsVoice}
+                onChange={(e) => setTtsVoice(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/8 text-sm text-text-main focus:outline-none focus:border-primary/40"
+              />
+            </div>
+          </div>
+
           <div className="space-y-3">
             <label className="text-sm font-semibold text-text-main flex items-center gap-2">
               <Shield className="w-3.5 h-3.5 text-warning" />
@@ -183,7 +203,7 @@ export default function ModelSettingsDrawer() {
             <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning/15">
               <Shield className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
               <p className="text-xs text-warning/90 leading-relaxed">
-              新版后端不直接读取这里的 API Key。请在本机 Agent 运行时中完成登录；本设置仅保留为前端兼容项。
+              API Key 只保存在后端，前端不会回显。默认使用 V4 Flash 并行规划、V4 Pro 汇总设计、V4 Flash Vision 验收成片。
               </p>
             </div>
           </div>
@@ -270,7 +290,7 @@ export default function ModelSettingsDrawer() {
           </div>
 
           <div className="space-y-3">
-            <label className="text-sm font-semibold text-text-main">草稿导出目标</label>
+            <label className="text-sm font-semibold text-text-main">工程导出策略</label>
             <div className="space-y-2">
               {DRAFT_TARGETS.map((t) => (
                 <button
@@ -288,9 +308,7 @@ export default function ModelSettingsDrawer() {
                   <div>
                     <p className="text-sm font-medium">{t}</p>
                     <p className="text-xs text-text-muted mt-0.5">
-                      {t === 'CapCut International'
-                        ? '导出为 CapCut 国际版可编辑的草稿格式'
-                        : '导出为国内剪映（手机版/专业版）兼容草稿'}
+                      当前版本只保留 HyperFrames 源工程和最终 MP4，不同步生成剪映草稿。
                     </p>
                   </div>
                 </button>

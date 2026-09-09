@@ -21,9 +21,9 @@ export default function DemoPreviewCard() {
       </div>
 
       <div className="space-y-2 text-xs text-text-muted">
-        <p>· Agent 分析素材并生成剪辑方案</p>
-        <p>· HyperFrames 渲染高级口播预览</p>
-        <p>· 同步导出可编辑剪映草稿</p>
+        <p>· Agent 分析音频或讲稿并生成视频方案</p>
+        <p>· HyperFrames 真实渲染 faceless explainer 成片</p>
+        <p>· 保留可继续修改的 HyperFrames 源工程</p>
       </div>
     </GlassCard>
   );

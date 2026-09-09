@@ -30,16 +30,16 @@ export default function EditPlanCard() {
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-primary-light" />
-            剪辑方案
+            解说视频方案
           </h3>
           <span className="px-3 py-1 rounded-full bg-primary/15 text-primary-light text-xs font-semibold border border-primary/20">
-            {editPlan.meta?.llm_status === 'ok' || !editPlan.meta?.llm_status ? 'Agent 方案' : '规则方案（已降级）'}
+            Agent 方案
           </span>
         </div>
 
         {planWarnings.length > 0 && (
           <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 space-y-1">
-            <p className="text-xs font-semibold text-warning">分析/方案降级提示（非全部能力成功）</p>
+            <p className="text-xs font-semibold text-warning">Agent 方案提示</p>
             {planWarnings.map((w, i) => (
               <p key={i} className="text-xs text-text-secondary leading-relaxed">
                 · {w.message}
@@ -64,7 +64,7 @@ export default function EditPlanCard() {
         </div>
 
         <div className="space-y-2">
-          <span className="text-xs font-semibold text-primary-light uppercase tracking-wider">Opening Hook</span>
+          <span className="text-xs font-semibold text-primary-light uppercase tracking-wider">开场抓点</span>
           <div className="p-3 rounded-lg bg-primary/8 border border-primary/15">
             <p className="text-sm text-text-main font-medium italic leading-relaxed">
               "{editPlan.hook}"
@@ -80,7 +80,7 @@ export default function EditPlanCard() {
         <div className="space-y-2">
           <span className="text-xs font-semibold text-accent uppercase tracking-wider flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5" />
-            B-roll 插入计划
+            视觉与素材计划
           </span>
           <div className="space-y-2 max-h-48 overflow-y-auto">
             {(editPlan.broll_plan || []).map((item, i) => (
@@ -93,7 +93,7 @@ export default function EditPlanCard() {
               </div>
             ))}
             {!editPlan.broll_plan?.length && (
-              <p className="text-xs text-text-muted">暂无 B-roll 插入，将使用纯口播剪辑</p>
+              <p className="text-xs text-text-muted">本次将以动态图形、信息卡和字幕为主，不额外插入图片素材</p>
             )}
           </div>
         </div>

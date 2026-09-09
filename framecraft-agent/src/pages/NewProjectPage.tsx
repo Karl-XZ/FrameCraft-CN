@@ -10,11 +10,11 @@ const RATIOS = [
 ];
 
 const STYLES = [
-  { v: 'modern_talking_head', label: '高级口播' },
-  { v: 'product_demo', label: '产品介绍' },
-  { v: 'educational_explainer', label: '知识科普' },
-  { v: 'viral_short', label: '比赛路演' },
-  { v: 'vlog', label: 'Vlog 解说' },
+  { v: 'faceless_explainer', label: '通用解说' },
+  { v: 'data_story', label: '数据观点' },
+  { v: 'process_breakdown', label: '流程拆解' },
+  { v: 'knowledge_burst', label: '知识科普' },
+  { v: 'storytelling', label: '叙事讲述' },
 ];
 
 const LANGS = [
@@ -27,10 +27,11 @@ export default function NewProjectPage() {
   const navigate = useNavigate();
   const [name, setName] = useState('未命名项目');
   const [aspectRatio, setAspectRatio] = useState('9:16');
-  const [targetStyle, setTargetStyle] = useState('modern_talking_head');
+  const [targetStyle, setTargetStyle] = useState('faceless_explainer');
+  const [scriptText, setScriptText] = useState('');
   const [targetDuration, setTargetDuration] = useState(60);
   const [outputLanguage, setOutputLanguage] = useState('zh');
-  const [generateDraft, setGenerateDraft] = useState(true);
+  const [generateDraft, setGenerateDraft] = useState(false);
   const [keepHyperframes, setKeepHyperframes] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -42,6 +43,7 @@ export default function NewProjectPage() {
         aspect_ratio: aspectRatio,
         target_style: targetStyle,
         target_duration: targetDuration,
+        script_text: scriptText,
         output_language: outputLanguage,
         generate_draft: generateDraft,
         keep_hyperframes: keepHyperframes,
@@ -66,8 +68,8 @@ export default function NewProjectPage() {
           <div className="w-10 h-10 rounded-xl bg-btn-gradient flex items-center justify-center shadow-glow">
             <Zap className="w-5 h-5 text-white" />
           </div>
-          <span className="text-2xl font-extrabold tracking-tight">
-            <span className="gradient-text">帧造</span>
+            <span className="text-2xl font-extrabold tracking-tight">
+            <span className="gradient-text">FrameCraft</span>
             <span className="text-text-main"> Agent</span>
           </span>
         </Link>
@@ -81,14 +83,14 @@ export default function NewProjectPage() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs text-primary-light font-medium mb-3">
             <Sparkles className="w-3.5 h-3.5" /> 新建项目
           </div>
-          <h1 className="text-3xl font-extrabold text-text-main">创建一个新项目</h1>
-          <p className="text-sm text-text-muted mt-1">配置基础信息后即可上传素材并开始生成</p>
+          <h1 className="text-3xl font-extrabold text-text-main">创建一个解说视频项目</h1>
+          <p className="text-sm text-text-muted mt-1">支持上传音频直接成片，也支持先写讲稿再自动生成旁白与画面</p>
         </div>
 
         <div className="glass-card rounded-2xl p-6 space-y-5">
           <div>
             <label className="block text-xs font-semibold text-text-secondary mb-1.5">项目名称</label>
-            <input className={fieldCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：AI 剪辑产品介绍" />
+            <input className={fieldCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：AI 产业观点一分钟解说" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -120,10 +122,21 @@ export default function NewProjectPage() {
             </div>
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-text-secondary mb-1.5">讲稿文字（可选）</label>
+            <textarea
+              className={`${fieldCls} min-h-40 resize-y`}
+              value={scriptText}
+              onChange={(e) => setScriptText(e.target.value)}
+              placeholder="如果你暂时没有音频，可以先贴讲稿。进入工作台后也可以继续编辑。"
+            />
+          </div>
+
           <label className="flex items-center justify-between py-2 cursor-pointer">
-            <span className="text-sm text-text-secondary">生成剪映 / CapCut 草稿</span>
+            <span className="text-sm text-text-secondary">保持不导出草稿</span>
             <input type="checkbox" checked={generateDraft} onChange={(e) => setGenerateDraft(e.target.checked)}
-              className="w-4 h-4 accent-primary" />
+              disabled
+              className="w-4 h-4 accent-primary opacity-60" />
           </label>
           <label className="flex items-center justify-between py-2 cursor-pointer">
             <span className="text-sm text-text-secondary">保留 HyperFrames 源工程</span>

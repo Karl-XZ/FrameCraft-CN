@@ -27,12 +27,12 @@ export default function LandingHero() {
             <Zap className="w-5 h-5 text-white" />
           </div>
           <span className="text-2xl font-extrabold tracking-tight">
-            <span className="gradient-text">帧造</span>
+            <span className="gradient-text">FrameCraft</span>
             <span className="text-text-main"> Agent</span>
           </span>
         </div>
         <div className="flex items-center gap-3">
-          {['Agent', 'HyperFrames', '剪映草稿'].map((badge) => (
+          {['openJiuwen', 'DeepSeek V4', 'HyperFrames'].map((badge) => (
             <span key={badge} className="px-3 py-1 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-text-secondary">
               {badge}
             </span>
@@ -55,18 +55,18 @@ export default function LandingHero() {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs text-primary-light font-medium">
                 <Sparkles className="w-3.5 h-3.5" />
-                AI 驱动的口播视频重构引擎
+                AI 驱动的解说视频生成引擎
               </div>
             </div>
             <h1 className="text-5xl font-extrabold leading-tight tracking-tight" style={{ letterSpacing: '-0.02em' }}>
-              <span className="text-text-main">让口播视频</span>
+              <span className="text-text-main">让音频或讲稿</span>
               <br />
-              <span className="gradient-text">从素材到成片</span>
+              <span className="gradient-text">从输入到成片</span>
               <br />
-              <span className="text-text-secondary">再到可编辑剪映草稿</span>
+              <span className="text-text-secondary">一步进入 HyperFrames 解说工作流</span>
             </h1>
             <p className="text-lg text-text-secondary max-w-md leading-relaxed">
-              上传你的口播视频和素材备注，AI 自动分析结构、规划剪辑、生成 HyperFrames 预览，并导出可直接在剪映编辑的草稿。
+              上传解说音频，或直接粘贴讲稿文字，Agent 会自动拆场景、生成动画、同步字幕并完成 HyperFrames 成片渲染。
             </p>
             <div className="flex items-center gap-4">
               <Link
@@ -95,25 +95,25 @@ export default function LandingHero() {
         {/* Features */}
         <div className="space-y-6">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-text-main">为什么选择帧造 Agent</h2>
-            <p className="text-sm text-text-muted mt-2">一站式口播视频 AI 重构解决方案</p>
+            <h2 className="text-2xl font-bold text-text-main">为什么选择 FrameCraft Agent</h2>
+            <p className="text-sm text-text-muted mt-2">一站式 faceless explainer 解说生成方案</p>
           </div>
           <div className="grid grid-cols-4 gap-4">
             <FeatureCard
-              title="理解口播与素材备注"
-              description="自动提取口播内容，识别素材备注的意图，智能匹配剪辑位置"
+              title="理解音频与讲稿"
+              description="自动转写内容、整理结构并生成场景种子，不需要手工先做时间线"
               icon={<Brain className="w-5 h-5 text-primary-light" />}
               gradient="bg-primary/15 text-primary-light"
             />
             <FeatureCard
               title="HyperFrames 高级生成"
-              description="基于 HyperFrames 技术，生成高质量预览帧序列"
+              description="基于 HyperFrames 技术生成可复现的 HTML 动画工程与最终成片"
               icon={<Film className="w-5 h-5 text-secondary" />}
               gradient="bg-secondary/15 text-secondary"
             />
             <FeatureCard
-              title="同步导出剪映草稿"
-              description="一键导出与剪映 / CapCut 完全兼容的工程文件，直接编辑"
+              title="保留项目工程"
+              description="输出 MP4 的同时保留 HyperFrames 源工程，便于继续修改和再渲染"
               icon={<Download className="w-5 h-5 text-accent" />}
               gradient="bg-accent/15 text-accent"
             />
@@ -130,7 +130,7 @@ export default function LandingHero() {
         <div className="space-y-8 py-8">
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-bold text-text-main">工作流程</h2>
-            <p className="text-sm text-text-muted">从上传到导出，五步完成专业级口播视频</p>
+            <p className="text-sm text-text-muted">从上传到导出，五步完成专业级解说视频</p>
           </div>
           <ProcessFlow />
         </div>

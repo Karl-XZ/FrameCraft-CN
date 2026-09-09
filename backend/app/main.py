@@ -14,10 +14,12 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import store
+from .ingest import ensure_version_subtitles, read_script_text, write_script_text
+from .retention import startup_prune_if_enabled
 from .security import cors_origin_regex, cors_origins, get_access_token, require_access_token, token_help
 from .single_agent import ProjectBusyError, runner
 
-app = FastAPI(title="FrameCraft Single Agent API")
+app = FastAPI(title="FrameCraft openJiuwen Agent API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins(),
@@ -37,14 +39,31 @@ def startup_security_notice():
         print(f"[FrameCraft] Access token source: {token_help()}", flush=True)
 
 
+@app.on_event("startup")
+def startup_retention_pass():
+    try:
+        result = startup_prune_if_enabled()
+        if result is None:
+            print("[FrameCraft] Retention cleanup disabled", flush=True)
+            return
+        print(
+            f"[FrameCraft] Retention cleanup checked {result['cutoff']}, "
+            f"deleted={result['deleted_count']}, orphans={len(result['orphan_paths_removed'])}",
+            flush=True,
+        )
+    except Exception as exc:
+        print(f"[FrameCraft] Retention cleanup skipped: {exc}", flush=True)
+
+
 class ProjectIn(BaseModel):
     name: str
     aspect_ratio: str = "9:16"
     target_duration: int = 60
-    target_style: str = "modern_talking_head"
+    target_style: str = "faceless_explainer"
     output_language: str = "zh"
-    generate_draft: bool = True
+    generate_draft: bool = False
     keep_hyperframes: bool = True
+    script_text: str = ""
 
 
 class AnalyzeIn(BaseModel):
@@ -67,9 +86,13 @@ class ApplyPatchIn(BaseModel):
     patch: dict[str, Any]
 
 
+class ScriptIn(BaseModel):
+    text: str = ""
+
+
 @app.get("/api/health")
 def health():
-    return {"ok": True, "mode": "single-agent"}
+    return {"ok": True, "mode": "openjiuwen-multi-agent"}
 
 
 @app.post("/api/projects")
@@ -87,6 +110,7 @@ def create_project(body: ProjectIn):
         "output_language": body.output_language,
         "generate_draft": body.generate_draft,
         "keep_hyperframes": body.keep_hyperframes,
+        "script_text": body.script_text.strip(),
         "current_version_id": None,
         "created_at": now,
         "updated_at": now,
@@ -97,7 +121,10 @@ def create_project(body: ProjectIn):
         data["chat"][pid] = []
         return project
 
-    return store.public_project(store.mutate(op))
+    created = store.mutate(op)
+    if body.script_text.strip():
+        write_script_text(pid, body.script_text)
+    return store.public_project(created)
 
 
 @app.get("/api/projects")
@@ -113,6 +140,8 @@ def get_project(project_id: str):
     project = store.snapshot()["projects"].get(project_id)
     if not project:
         raise HTTPException(404, "Project not found")
+    project = dict(project)
+    project["script_text"] = read_script_text(project)
     return store.public_project(project)
 
 
@@ -141,6 +170,31 @@ def list_assets(project_id: str):
     return [store.public_asset(a) for a in data["assets"].values() if a["project_id"] == project_id]
 
 
+@app.get("/api/projects/{project_id}/script")
+def get_script(project_id: str):
+    project = _ensure_project(project_id)
+    return {"text": read_script_text(project)}
+
+
+@app.put("/api/projects/{project_id}/script")
+def put_script(project_id: str, body: ScriptIn):
+    text = (body.text or "").strip()
+
+    def op(data):
+        project = data["projects"].get(project_id)
+        if not project:
+            raise HTTPException(404, "Project not found")
+        project["script_text"] = text
+        project["updated_at"] = store.now_iso()
+        return project
+
+    project = store.mutate(op)
+    write_script_text(project_id, text)
+    project = dict(project)
+    project["script_text"] = text
+    return store.public_project(project)
+
+
 @app.post("/api/projects/{project_id}/assets/upload")
 async def upload_asset(
     project_id: str,
@@ -159,7 +213,15 @@ async def upload_asset(
     guessed_mime = mimetypes.guess_type(filename)[0]
     mime = guessed_mime if not file.content_type or file.content_type == "application/octet-stream" else file.content_type
     mime = mime or "application/octet-stream"
-    file_type = "video" if mime.startswith("video/") else "audio" if mime.startswith("audio/") else "image" if mime.startswith("image/") else "file"
+    file_type = (
+        "video"
+        if mime.startswith("video/")
+        else "audio"
+        if mime.startswith("audio/")
+        else "image"
+        if mime.startswith("image/")
+        else "file"
+    )
     asset = {
         "id": aid,
         "project_id": project_id,
@@ -336,6 +398,7 @@ def version_timeline(project_id: str, version_id: str):
 def version_subtitles(project_id: str, version_id: str):
     version = _version(project_id, version_id)
     path = Path(version["version_dir"]) / "subtitles.srt"
+    ensure_version_subtitles(project_id, Path(version["version_dir"]))
     return _file_or_json(path, "")
 
 
@@ -367,7 +430,7 @@ def import_guide(project_id: str, version_id: str):
     guide_path = Path(version.get("import_guide_path") or Path(version["version_dir"]) / "jianying_import_guide.md")
     if guide_path.is_file():
         return {"content": guide_path.read_text(encoding="utf-8")}
-    return {"content": "该版本没有生成剪映草稿导入说明。若项目开启了草稿导出，这应视为生成失败而不是成功兜底。"}
+    return {"content": "当前版本不生成剪映草稿，因此没有导入说明。"}
 
 
 @app.post("/api/projects/{project_id}/chat")
@@ -391,7 +454,7 @@ def chat(project_id: str, body: ChatIn):
                 "id": store.new_id("msg"),
                 "project_id": project_id,
                 "role": "agent",
-                "content": "这条消息已经收到，但 Agent 没能启动。请检查后端日志或本机 Agent 登录状态后重试。",
+                "content": "这条消息已经收到，但 Agent 没能启动。请检查后端日志或 DeepSeek API 配置后重试。",
                 "status": "failed",
                 "created_at": store.now_iso(),
             })
@@ -425,16 +488,17 @@ def model_providers():
     return {
         "providers": [
             {
-                "id": "codex",
-                "label": "本机 Agent",
-                "base_url": "",
-                "note": "模型、登录状态和工具权限由本机 Agent 运行时配置决定。",
+                "id": "deepseek",
+                "label": "DeepSeek",
+                "base_url": "https://api.deepseek.com",
+                "note": "后端使用 openJiuwen 多 Agent 团队与 DeepSeek V4 驱动视频设计、代码生成和视觉验收。",
             }
         ],
-        "codex": {
-            "label": "本机 Agent",
-            "note": "新后端只启动一个项目 Agent；模型与登录状态由本机 Agent 运行时配置决定。",
-        }
+        "deepseek": {
+            "label": "DeepSeek",
+            "base_url": "https://api.deepseek.com",
+            "note": "默认并行模型：deepseek-v4-flash；代码总监：deepseek-v4-pro；视觉验收：deepseek-v4-flash-vision-exp。Key 仅存后端，不回显到前端。",
+        },
     }
 
 
@@ -446,13 +510,20 @@ def get_settings():
 @app.patch("/api/settings/model")
 def save_settings(body: dict[str, str]):
     def op(data):
-        allowed = {"provider", "text_model", "vision_model", "base_url", "asr_model"}
+        allowed = {
+            "provider",
+            "text_model",
+            "vision_model",
+            "pro_model",
+            "base_url",
+            "asr_model",
+            "tts_model",
+            "tts_voice",
+            "api_key",
+        }
         for key in allowed:
             if key in body:
                 data["settings"][key] = body[key]
-        # The current local-agent backend does not need browser-submitted API keys.
-        # Do not persist or echo them from the public web UI.
-        data["settings"]["api_key"] = ""
         return store.public_settings(data["settings"])
     return store.mutate(op)
 

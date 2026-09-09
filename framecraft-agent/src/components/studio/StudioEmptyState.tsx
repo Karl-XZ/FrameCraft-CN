@@ -12,10 +12,10 @@ export default function StudioEmptyState() {
 
       <div className="text-center space-y-3">
         <h2 className="text-2xl font-extrabold text-text-main tracking-tight">
-          开始创建你的 AI 口播视频
+          开始创建你的 AI 解说视频
         </h2>
         <p className="text-sm text-text-muted max-w-sm mx-auto leading-relaxed">
-          上传口播视频和素材，AI 将自动分析、剪辑并生成可编辑的剪映草稿
+          上传解说音频，或先写讲稿文字，Agent 会自动完成分镜、动画、字幕与 HyperFrames 成片渲染
         </p>
       </div>
 

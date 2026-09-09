@@ -1,22 +1,20 @@
 import React from 'react';
-import { FileVideo, Image, Music, Hexagon } from 'lucide-react';
+import { FileText, Film, Image, Music } from 'lucide-react';
 import Badge from '../ui/Badge';
 import { Asset } from '../../store/projectStore';
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
-  '口播视频': <FileVideo className="w-4 h-4" />,
-  'B-roll': <FileVideo className="w-4 h-4" />,
+  '素材': <Film className="w-4 h-4" />,
   '图片': <Image className="w-4 h-4" />,
   '音频': <Music className="w-4 h-4" />,
-  'LOGO': <Hexagon className="w-4 h-4" />,
+  '讲稿': <FileText className="w-4 h-4" />,
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  '口播视频': 'bg-primary/15 text-primary-light border-primary/25',
-  'B-roll': 'bg-secondary/15 text-secondary border-secondary/25',
+  '素材': 'bg-secondary/15 text-secondary border-secondary/25',
   '图片': 'bg-accent/15 text-accent border-accent/25',
   '音频': 'bg-warning/15 text-warning border-warning/25',
-  'LOGO': 'bg-success/15 text-success border-success/25',
+  '讲稿': 'bg-success/15 text-success border-success/25',
 };
 
 interface AssetCardProps {
@@ -25,7 +23,7 @@ interface AssetCardProps {
 }
 
 export default function AssetCard({ asset, onClick }: AssetCardProps) {
-  const statusVariant = asset.status === '已转录' ? 'success' : asset.status === '待分析' ? 'warning' : 'default';
+  const statusVariant = asset.status === '已转写' ? 'success' : asset.status === '待分析' ? 'warning' : 'default';
 
   return (
     <div
