@@ -1,0 +1,49 @@
+{
+  "created_at": "2026-09-09T22:52:44.421118+00:00",
+  "source_audio": "real-60s.wav",
+  "target_seconds": 300,
+  "runs": [
+    {
+      "index": 1,
+      "project_id": "proj_e7bce2b2dfab",
+      "aspect_ratio": "16:9",
+      "analysis_seconds": 18.11,
+      "generation_seconds": 58.31,
+      "total_seconds": 76.51,
+      "video_path": "outputs/proj_e7bce2b2dfab/v001/preview.mp4",
+      "duration_seconds": 60.843,
+      "visual_score": 88,
+      "visual_model": "deepseek-v4-flash-vision-exp",
+      "passed": true
+    },
+    {
+      "index": 2,
+      "project_id": "proj_6f45b6afc307",
+      "aspect_ratio": "9:16",
+      "analysis_seconds": 18.11,
+      "generation_seconds": 60.34,
+      "total_seconds": 78.54,
+      "video_path": "outputs/proj_6f45b6afc307/v001/preview.mp4",
+      "duration_seconds": 60.843,
+      "visual_score": 88,
+      "visual_model": "deepseek-v4-flash-vision-exp",
+      "passed": true
+    },
+    {
+      "index": 3,
+      "project_id": "proj_da155e147ef4",
+      "aspect_ratio": "16:9",
+      "analysis_seconds": 18.12,
+      "generation_seconds": 56.33,
+      "total_seconds": 74.55,
+      "video_path": "outputs/proj_da155e147ef4/v001/preview.mp4",
+      "duration_seconds": 60.843,
+      "visual_score": 88,
+      "visual_model": "deepseek-v4-flash-vision-exp",
+      "passed": true
+    }
+  ],
+  "max_total_seconds": 78.54,
+  "mean_total_seconds": 76.53,
+  "stable_under_five_minutes": true
+}
