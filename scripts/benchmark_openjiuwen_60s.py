@@ -89,7 +89,7 @@ def run_once(session: requests.Session, api: str, audio: Path, index: int, aspec
 
     generate = session.post(
         f"{api}/api/projects/{project_id}/generate",
-        json={"resolution": "1080p", "fps": 30, "strategy": "complete"},
+        json={"resolution": "1080p", "fps": 24, "strategy": "complete"},
         timeout=30,
     )
     generate.raise_for_status()

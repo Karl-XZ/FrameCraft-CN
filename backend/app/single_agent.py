@@ -767,12 +767,22 @@ class SingleAgentRunner:
         if render_quality not in RENDER_QUALITY_SET:
             return {"ok": False, "error": f"不支持的 quality：{quality}"}
         hyperframes_cli = self._hyperframes_cli_command()
+        render_flags: list[str] = []
+        workers = os.getenv("FRAMECRAFT_RENDER_WORKERS", "").strip()
+        if workers:
+            try:
+                render_flags.extend(["--workers", str(max(1, int(workers)))])
+            except ValueError:
+                return {"ok": False, "error": "FRAMECRAFT_RENDER_WORKERS 必须是正整数。"}
+        if os.getenv("FRAMECRAFT_LOW_MEMORY_RENDER", "").strip().lower() in {"1", "true", "yes", "on"}:
+            render_flags.extend(["--low-memory-mode", "--no-browser-gpu", "--quiet"])
+        extra_flags = " ".join(shlex.quote(flag) for flag in render_flags)
         command = (
             f'HYPERFRAMES_NO_TELEMETRY=1 {hyperframes_cli} render '
             f'--output {shlex.quote(str(out_path))} '
             f'--fps {int(fps)} '
             f'--quality {shlex.quote(render_quality)} '
-            '--strict'
+            f'--strict {extra_flags}'
         )
         result = self._tool_run_command(job_id, command, str(hf_dir), timeout_sec)
         combined = "\n".join(
@@ -917,11 +927,13 @@ class SingleAgentRunner:
         )
 
         self._set_step(job_id, 76, "正在使用 HyperFrames 真实渲染 MP4")
+        render_fps = int((job.get("payload") or {}).get("fps") or 24)
+        render_fps = max(15, min(render_fps, 60))
         render = self._tool_render_hyperframes_project(
             job_id=job_id,
             project_dir=str(boot["project_dir"]),
             output=str(version_dir / "preview.mp4"),
-            fps=30,
+            fps=render_fps,
             quality="standard",
             timeout_sec=1800,
         )

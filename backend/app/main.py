@@ -73,7 +73,7 @@ class AnalyzeIn(BaseModel):
 
 class GenerateIn(BaseModel):
     resolution: str = "1080p"
-    fps: int = 30
+    fps: int = 24
     strategy: str = "complete"
 
 

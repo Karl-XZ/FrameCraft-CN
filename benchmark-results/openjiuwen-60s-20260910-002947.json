@@ -1,0 +1,23 @@
+{
+  "created_at": "2026-09-09T22:29:47.678442+00:00",
+  "source_audio": "real-60s.wav",
+  "target_seconds": 300,
+  "runs": [
+    {
+      "index": 1,
+      "project_id": "proj_82ebefd4e9b1",
+      "aspect_ratio": "16:9",
+      "analysis_seconds": 16.1,
+      "generation_seconds": 64.35,
+      "total_seconds": 80.53,
+      "video_path": "outputs/proj_82ebefd4e9b1/v001/preview.mp4",
+      "duration_seconds": 60.843,
+      "visual_score": 88,
+      "visual_model": "deepseek-v4-flash-vision-exp",
+      "passed": true
+    }
+  ],
+  "max_total_seconds": 80.53,
+  "mean_total_seconds": 80.53,
+  "stable_under_five_minutes": true
+}

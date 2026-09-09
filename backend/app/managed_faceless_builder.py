@@ -229,6 +229,10 @@ def render_html_document(
     secondary = safe_css_color(theme.get("secondary"), "#41e5b5")
     accent = safe_css_color(theme.get("accent"), "#ffb35c")
     scene_markup = "\n".join(render_scene_markup(scene, width, height) for scene in scenes)
+    caption_markup = "\n".join(
+        f'<div id="caption-{int(cue["index"]):03d}" class="caption-line">{html.escape(str(cue["text"]))}</div>'
+        for cue in cues
+    )
     cue_js = json.dumps(cues, ensure_ascii=False)
     scene_js = json.dumps(
         [
@@ -305,7 +309,6 @@ def render_html_document(
       .orb {{
         position: absolute;
         border-radius: 999px;
-        filter: blur(22px);
         opacity: 0.44;
         animation: orbFloat 10s ease-in-out infinite;
       }}
@@ -352,7 +355,6 @@ def render_html_document(
         background: rgba(255,255,255,0.08);
         border: 1px solid rgba(255,255,255,0.12);
         box-shadow: 0 14px 32px rgba(2, 8, 20, 0.24);
-        backdrop-filter: blur(18px);
       }}
       .scene {{
         position: absolute;
@@ -376,7 +378,6 @@ def render_html_document(
         color: #e8f1ff;
         background: rgba(10, 22, 48, 0.62);
         border: 1px solid rgba(148, 182, 255, 0.16);
-        backdrop-filter: blur(16px);
       }}
       .headline {{
         position: absolute;
@@ -422,7 +423,6 @@ def render_html_document(
         background: rgba(9, 20, 44, 0.58);
         border: 1px solid rgba(255,255,255,0.1);
         box-shadow: 0 28px 64px rgba(0, 6, 22, 0.28);
-        backdrop-filter: blur(22px);
       }}
       .process-board {{
         right: 0;
@@ -668,11 +668,12 @@ def render_html_document(
         transform: translateX(-50%);
         z-index: 20;
         width: min(88%, {780 if height > width else 1160}px);
-        display: flex;
-        justify-content: center;
+        display: grid;
         pointer-events: none;
       }}
       .caption-line {{
+        grid-area: 1 / 1;
+        justify-self: center;
         opacity: 0;
         visibility: hidden;
         max-width: 100%;
@@ -686,7 +687,6 @@ def render_html_document(
         line-height: 1.42;
         font-weight: 700;
         color: #f8fbff;
-        backdrop-filter: blur(22px);
       }}
       @keyframes orbFloat {{
         0%, 100% {{ transform: translate3d(0, 0, 0) scale(1); }}
@@ -705,8 +705,8 @@ def render_html_document(
         50% {{ box-shadow: 0 0 0 18px rgba(124, 180, 255, 0.08); }}
       }}
       @keyframes dataGlow {{
-        0%, 100% {{ filter: saturate(1) brightness(1); }}
-        50% {{ filter: saturate(1.12) brightness(1.08); }}
+        0%, 100% {{ opacity: 0.9; transform: scaleY(0.98); }}
+        50% {{ opacity: 1; transform: scaleY(1); }}
       }}
     </style>
   </head>
@@ -726,7 +726,7 @@ def render_html_document(
         <div class="orb orb-c"></div>
         {scene_markup}
         <div id="centered-subtitles" class="caption-shell clip" data-start="0" data-duration="{duration_s:.3f}">
-          <div id="caption-line" class="caption-line"></div>
+          {caption_markup}
         </div>
       </div>
       <audio id="narration" src="assets/{html.escape(audio_asset_name)}" preload="auto" data-start="0"></audio>
@@ -737,11 +737,6 @@ def render_html_document(
       window.__timelines.main = tl;
       const cues = {cue_js};
       const scenes = {scene_js};
-      const captionLine = document.getElementById("caption-line");
-
-      function setCaption(text) {{
-        captionLine.textContent = text || "";
-      }}
 
       tl.set(".headline, .subline, .chip, .quote-card, .process-board, .data-board, .knowledge-board, .story-board, .scene-tag", {{
         autoAlpha: 0
@@ -788,9 +783,9 @@ def render_html_document(
       }});
 
       cues.forEach((cue) => {{
-        tl.call(() => setCaption(cue.text), [], cue.start);
-        tl.fromTo("#caption-line", {{ autoAlpha: 0, y: 12 }}, {{ autoAlpha: 1, y: 0, duration: 0.16, ease: "power1.out" }}, cue.start);
-        tl.to("#caption-line", {{ autoAlpha: 0, y: -10, duration: 0.18, ease: "power1.in" }}, Math.max(cue.start + 0.18, cue.end - 0.16));
+        const selector = "#caption-" + String(cue.index).padStart(3, "0");
+        tl.fromTo(selector, {{ autoAlpha: 0, y: 12 }}, {{ autoAlpha: 1, y: 0, duration: 0.16, ease: "power1.out" }}, cue.start);
+        tl.to(selector, {{ autoAlpha: 0, y: -10, duration: 0.18, ease: "power1.in" }}, Math.max(cue.start + 0.18, cue.end - 0.16));
       }});
     </script>
   </body>

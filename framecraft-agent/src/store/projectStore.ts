@@ -127,7 +127,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
   apiKey: '',
   videoRatio: '9:16',
   videoResolution: '1080p正式导出',
-  frameRate: 30,
+  frameRate: 24,
   targetDuration: 60,
   targetStyle: 'faceless_explainer',
   outputLanguage: 'zh',
