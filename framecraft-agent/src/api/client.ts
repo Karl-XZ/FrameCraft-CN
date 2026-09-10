@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+const viteBase = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? viteBase;
 const TOKEN_STORAGE_KEY = 'framecraft_access_token';
 let volatileAccessToken = '';
 
@@ -290,11 +291,17 @@ export const api = {
     if (!response.ok) throw new Error(await response.text());
     return response.blob();
   },
-  completeLocalRender: async (projectId: string, versionId: string, video: Blob) => {
+  reviewLocalRender: async (
+    projectId: string,
+    versionId: string,
+    contactSheet: Blob,
+    mediaValidation: Record<string, unknown>,
+  ) => {
     const form = new FormData();
-    form.append('file', video, 'preview.mp4');
+    form.append('file', contactSheet, 'contact-sheet.jpg');
+    form.append('media_json', JSON.stringify(mediaValidation));
     const response = await authFetch(
-      `${API_BASE}/api/projects/${projectId}/versions/${versionId}/local-render-complete`,
+      `${API_BASE}/api/projects/${projectId}/versions/${versionId}/local-render-review`,
       { method: 'POST', body: form },
     );
     if (!response.ok) throw new Error(await response.text());

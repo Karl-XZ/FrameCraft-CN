@@ -28,7 +28,7 @@ export default function StudioLayout() {
     clearProject, setShowSettingsDrawer,
     setSelectedAssetId, setShowAssetDrawer,
     generateHyperFramesProgress, generateDraftProgress,
-    versions, currentVersionId, setCurrentVersionId, setPreviewUrl, setVersion, error,
+    versions, currentVersionId, setCurrentVersionId, setPreviewUrl, setVersion, previewUrl, error,
     activeJobId, scriptText,
   } = useProjectStore();
   const { startAnalyze, saveScriptText } = useStudioWorkflow();
@@ -100,7 +100,7 @@ export default function StudioLayout() {
                   onClick={() => {
                     setCurrentVersionId(v.id);
                     setVersion(`v${v.version_number}.0`);
-                    if (v.preview_url) setPreviewUrl(api.fileUrl(v.preview_url));
+                    setPreviewUrl(null);
                   }}
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
                     v.id === currentVersion?.id
@@ -114,9 +114,9 @@ export default function StudioLayout() {
             </div>
             {currentVersion && (
               <div className="grid grid-cols-2 gap-3">
-                {currentVersion.preview_url && (
-                  <a href={api.fileUrl(currentVersion.preview_url)} download>
-                    <DownloadResultCard title="完整视频" description="MP4 · HyperFrames 预览" icon={<Zap className="w-4 h-4 text-primary-light" />} badge="推荐" badgeVariant="primary" size="MP4" />
+                {previewUrl && (
+                  <a href={previewUrl} download={`framecraft-${currentVersion.id}.mp4`}>
+                    <DownloadResultCard title="本机视频" description="MP4 · 仅在当前电脑" icon={<Zap className="w-4 h-4 text-primary-light" />} badge="本地" badgeVariant="primary" size="MP4" />
                   </a>
                 )}
                 {currentVersion.timeline_url && (

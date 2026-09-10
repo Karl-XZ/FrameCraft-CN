@@ -21,6 +21,7 @@ const configuredOrigins = (process.env.FRAMECRAFT_LOCAL_RENDERER_ORIGINS || 'htt
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);
+const renderCrf = Math.max(18, Math.min(Number(process.env.FRAMECRAFT_LOCAL_RENDERER_CRF || 30), 40));
 
 function originAllowed(origin) {
   if (!origin) return true;
@@ -60,6 +61,8 @@ function publicJob(job) {
     created_at: job.createdAt,
     completed_at: job.completedAt || null,
     download_url: job.status === 'completed' ? `/jobs/${job.id}/video` : null,
+    review_url: job.status === 'completed' ? `/jobs/${job.id}/review` : null,
+    media_validation: job.mediaValidation || null,
   };
 }
 
@@ -144,6 +147,26 @@ async function validateVideo(videoPath, expectedDuration) {
   if (!duration || Math.abs(duration - expectedDuration) > Math.max(0.8, expectedDuration * 0.02)) {
     throw new Error(`本地成片时长异常：期望 ${expectedDuration.toFixed(2)} 秒，实际 ${duration.toFixed(2)} 秒。`);
   }
+  const video = streams.find((item) => item.codec_type === 'video');
+  const info = await stat(videoPath);
+  return {
+    duration_s: duration,
+    size_bytes: info.size,
+    width: Number(video?.width || 0),
+    height: Number(video?.height || 0),
+    has_video: true,
+    has_audio: true,
+    renderer: 'hyperframes-strict',
+  };
+}
+
+async function extractContactSheet(videoPath, outputPath, duration) {
+  const interval = Math.max(duration / 8, 0.5);
+  await run(
+    'ffmpeg',
+    ['-y', '-v', 'error', '-i', videoPath, '-vf', `fps=1/${interval},scale=480:-2,tile=4x2`, '-frames:v', '1', outputPath],
+    {},
+  );
 }
 
 async function render(job, fps) {
@@ -166,7 +189,10 @@ async function render(job, fps) {
     if (!existsSync(cli)) throw new Error('未安装 HyperFrames。请在 FrameCraft 目录运行 npm install。');
     await run(
       cli,
-      ['render', '--output', job.videoPath, '--fps', String(renderFps), '--quality', 'standard', '--strict'],
+      [
+        'render', '--output', job.videoPath, '--fps', String(renderFps),
+        '--quality', 'standard', '--crf', String(renderCrf), '--strict',
+      ],
       { cwd: projectDir, shell: process.platform === 'win32' },
       (text) => {
         const matches = [...text.matchAll(/(\d{1,3})%/g)];
@@ -175,7 +201,11 @@ async function render(job, fps) {
     );
     job.progress = 94;
     job.step = '正在检查本地成片完整性';
-    await validateVideo(job.videoPath, expectedDuration);
+    job.mediaValidation = await validateVideo(job.videoPath, expectedDuration);
+    job.reviewPath = path.join(job.workspace, 'contact-sheet.jpg');
+    job.progress = 97;
+    job.step = '正在生成本地视觉验收联系表';
+    await extractContactSheet(job.videoPath, job.reviewPath, job.mediaValidation.duration_s);
     job.status = 'completed';
     job.progress = 100;
     job.step = '本地 HyperFrames 渲染完成';
@@ -253,6 +283,19 @@ async function handle(req, res) {
       'Content-Disposition': `attachment; filename="framecraft-${job.id}.mp4"`,
     });
     return createReadStream(job.videoPath).pipe(res);
+  }
+  const reviewMatch = url.pathname.match(/^\/jobs\/([0-9a-f-]+)\/review$/i);
+  if (req.method === 'GET' && reviewMatch) {
+    const job = jobs.get(reviewMatch[1]);
+    if (!job || job.status !== 'completed') return sendJson(req, res, 404, { error: '本地视觉验收联系表尚未生成。' });
+    const info = await stat(job.reviewPath);
+    res.writeHead(200, {
+      ...corsHeaders(req),
+      'Content-Type': 'image/jpeg',
+      'Content-Length': info.size,
+      'Cache-Control': 'no-store',
+    });
+    return createReadStream(job.reviewPath).pipe(res);
   }
   return sendJson(req, res, 404, { error: '接口不存在。' });
 }

@@ -38,3 +38,4 @@ manual_codex_videos/**/*.mp4
 manual_codex_videos/**/*.jpg
 manual_codex_videos/**/*.png
 manual_codex_videos/**/*.log
+benchmark-results/*.mp4

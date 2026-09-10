@@ -961,26 +961,33 @@ class SingleAgentRunner:
         version = store.mutate(op)
         return {"ok": True, "version": store.public_version(version), "manifest": manifest}
 
-    def finalize_local_render(self, project_id: str, version_id: str, uploaded_path: Path) -> dict[str, Any]:
+    def review_local_render(
+        self,
+        project_id: str,
+        version_id: str,
+        contact_sheet: Path,
+        media_validation: dict[str, Any],
+    ) -> dict[str, Any]:
         snapshot = store.snapshot()
         version = snapshot["versions"].get(version_id)
         if not version or version.get("project_id") != project_id:
             raise RuntimeError("本地渲染版本不存在。")
-        if version.get("status") not in {"awaiting_local_render", "local_render_failed"}:
+        if version.get("status") not in {"awaiting_local_render", "local_render_failed", "local_render_ready"}:
             raise RuntimeError("该版本当前不等待本地渲染结果。")
         version_dir = Path(version["version_dir"])
-        preview = version_dir / "preview.mp4"
-        uploaded_path.replace(preview)
         expected_duration = float(version.get("expected_duration_s") or 0)
         try:
-            media = self._probe_rendered_media(preview, expected_duration)
-            sheet = self._extract_contact_sheet(preview, version_dir / "visual-review.jpg", expected_duration)
+            actual_duration = float(media_validation.get("duration_s") or 0)
+            if not actual_duration or abs(actual_duration - expected_duration) > max(0.8, expected_duration * 0.02):
+                raise RuntimeError(
+                    f"本地成片时长异常：期望 {expected_duration:.2f} 秒，实际 {actual_duration:.2f} 秒。"
+                )
             project = snapshot["projects"].get(project_id) or {}
             creative_plan = _safe_json(store.project_dir(project_id) / "analysis" / "creative_plan.json")
-            transcript_path = store.project_dir(project_id) / "source" / "transcript.txt"
+            transcript_path = store.project_dir(project_id) / "input" / "transcript.txt"
             source_text = transcript_path.read_text(encoding="utf-8", errors="replace") if transcript_path.is_file() else ""
             review = run_visual_review(
-                sheet,
+                contact_sheet,
                 {
                     "project": project.get("name"),
                     "duration_s": expected_duration,
@@ -988,7 +995,7 @@ class SingleAgentRunner:
                     "scenes": creative_plan.get("scenes") or [],
                 },
             )
-            review["media_validation"] = media
+            review["media_validation"] = media_validation
             review["review_is_model_generated"] = True
             (version_dir / "agent_visual_review.json").write_text(
                 json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -1006,19 +1013,19 @@ class SingleAgentRunner:
 
         def op(data):
             current = data["versions"][version_id]
-            current["status"] = "completed"
-            current["preview_path"] = str(preview)
-            current["preview_url"] = f"/api/projects/{project_id}/versions/{version_id}/preview"
+            current["status"] = "local_render_ready"
+            current["preview_path"] = None
+            current["preview_url"] = None
             project_data = data["projects"][project_id]
-            project_data["current_version_id"] = version_id
-            project_data["status"] = "completed"
+            project_data["current_version_id"] = None
+            project_data["status"] = "ready_to_render"
             project_data["updated_at"] = store.now_iso()
             data.setdefault("chat", {}).setdefault(project_id, []).append(
                 {
                     "id": store.new_id("msg"),
                     "project_id": project_id,
                     "role": "agent",
-                    "content": "本地 HyperFrames 渲染成片已回传，并通过完整时长、音视频流和视觉 Agent 验收。",
+                    "content": "本机 HyperFrames 成片已通过完整时长、音视频流和视觉 Agent 验收；MP4 只保留在当前用户电脑，服务器仅保存可复渲染工程。",
                     "status": "done",
                     "created_at": store.now_iso(),
                 }
@@ -1509,9 +1516,8 @@ class SingleAgentRunner:
 
     @staticmethod
     def _render_target(job: dict[str, Any]) -> str:
-        requested = str((job.get("payload") or {}).get("render_target") or "").strip().lower()
-        default = os.getenv("FRAMECRAFT_RENDER_TARGET", "local").strip().lower()
-        return "server" if (requested or default) == "server" else "local"
+        # The server prepares reproducible projects only; rendering belongs to the user's device.
+        return "local"
 
     def _needs_input(self, job_id: str, message: str) -> None:
         pid = store.snapshot()["jobs"][job_id]["project_id"]

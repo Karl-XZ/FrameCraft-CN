@@ -56,6 +56,40 @@ def startup_retention_pass():
         print(f"[FrameCraft] Retention cleanup skipped: {exc}", flush=True)
 
 
+@app.on_event("startup")
+def startup_enforce_project_only_storage():
+    removed = 0
+    for pattern in ("*.mp4", "visual-review.jpg", "local-render-review-*"):
+        for path in store.OUTPUTS.rglob(pattern):
+            if path.is_file():
+                path.unlink(missing_ok=True)
+                removed += 1
+
+    def migrate(data):
+        migrated = 0
+        projects_to_reset = set()
+        for version in data.get("versions", {}).values():
+            if not version.get("preview_path") and not version.get("preview_url"):
+                continue
+            version["preview_path"] = None
+            version["preview_url"] = None
+            bundle = Path(version.get("version_dir") or "") / "hyperframes_project.zip"
+            if bundle.is_file():
+                version["status"] = "local_render_ready"
+                projects_to_reset.add(version.get("project_id"))
+            migrated += 1
+        for project_id in projects_to_reset:
+            project = data.get("projects", {}).get(project_id)
+            if project:
+                project["current_version_id"] = None
+                project["status"] = "ready_to_render"
+                project["updated_at"] = store.now_iso()
+        return migrated
+
+    migrated = store.mutate(migrate)
+    print(f"[FrameCraft] Project-only storage enforced: files_removed={removed}, versions_migrated={migrated}", flush=True)
+
+
 class ProjectIn(BaseModel):
     name: str
     aspect_ratio: str = "9:16"
@@ -94,11 +128,11 @@ class ScriptIn(BaseModel):
 
 @app.get("/api/health")
 def health():
-    render_target = os.getenv("FRAMECRAFT_RENDER_TARGET", "local").strip().lower()
     return {
         "ok": True,
         "mode": "openjiuwen-multi-agent",
-        "default_render_target": "server" if render_target == "server" else "local",
+        "default_render_target": "local",
+        "server_stores_video": False,
     }
 
 
@@ -390,8 +424,8 @@ def activate_version(project_id: str, version_id: str):
 
 @app.get("/api/projects/{project_id}/versions/{version_id}/preview")
 def version_preview(project_id: str, version_id: str):
-    version = _version(project_id, version_id)
-    return FileResponse(version["preview_path"], media_type="video/mp4")
+    _version(project_id, version_id)
+    raise HTTPException(410, "服务器不保存或提供成片，请下载工程并在用户电脑本地渲染。")
 
 
 @app.get("/api/projects/{project_id}/versions/{version_id}/timeline")
@@ -418,35 +452,47 @@ def version_hyperframes(project_id: str, version_id: str):
     raise HTTPException(404, "HyperFrames zip not found")
 
 
-@app.post("/api/projects/{project_id}/versions/{version_id}/local-render-complete")
-async def complete_local_render(project_id: str, version_id: str, file: UploadFile = File(...)):
+@app.post("/api/projects/{project_id}/versions/{version_id}/local-render-review")
+async def review_local_render(
+    project_id: str,
+    version_id: str,
+    file: UploadFile = File(...),
+    media_json: str = Form("{}"),
+):
     version = _version(project_id, version_id)
-    if version.get("status") not in {"awaiting_local_render", "local_render_failed"}:
+    if version.get("status") not in {"awaiting_local_render", "local_render_failed", "local_render_ready"}:
         raise HTTPException(409, "该版本当前不等待本地渲染结果。")
-    suffix = Path(file.filename or "preview.mp4").suffix.lower()
-    if suffix != ".mp4":
-        raise HTTPException(400, "本地渲染结果必须是 MP4。")
-    max_bytes = int(os.getenv("FRAMECRAFT_LOCAL_RENDER_UPLOAD_MAX_BYTES", str(700 * 1024 * 1024)))
-    target_dir = Path(version["version_dir"])
-    target_dir.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix="local-render-", suffix=".mp4", dir=target_dir)
+    suffix = Path(file.filename or "contact-sheet.jpg").suffix.lower()
+    if suffix not in {".jpg", ".jpeg", ".png"}:
+        raise HTTPException(400, "本地渲染验收文件必须是 JPG 或 PNG 联系表。")
+    try:
+        media_validation = json.loads(media_json)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(400, "本地媒体检查数据无效。") from exc
+    fd, temp_name = tempfile.mkstemp(prefix="local-render-review-", suffix=suffix, dir=store.RUNTIME)
     os.close(fd)
     temp_path = Path(temp_name)
     written = 0
     try:
         with temp_path.open("wb") as output:
-            while chunk := await file.read(1024 * 1024):
+            while chunk := await file.read(256 * 1024):
                 written += len(chunk)
-                if written > max_bytes:
-                    raise HTTPException(413, "本地渲染文件超过上传大小限制。")
+                if written > 12 * 1024 * 1024:
+                    raise HTTPException(413, "本地渲染联系表超过上传大小限制。")
                 output.write(chunk)
-        return await asyncio.to_thread(runner.finalize_local_render, project_id, version_id, temp_path)
+        return await asyncio.to_thread(
+            runner.review_local_render,
+            project_id,
+            version_id,
+            temp_path,
+            media_validation,
+        )
     except HTTPException:
-        temp_path.unlink(missing_ok=True)
         raise
     except Exception as exc:
-        temp_path.unlink(missing_ok=True)
         raise HTTPException(422, str(exc)) from exc
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 @app.get("/api/projects/{project_id}/versions/{version_id}/draft")

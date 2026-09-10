@@ -1,7 +1,6 @@
 import React from 'react';
 import { FileVideo, Zap } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
-import { api } from '../../api/client';
 
 export default function BottomStatusBar() {
   const {
@@ -10,11 +9,8 @@ export default function BottomStatusBar() {
     version,
     generateHyperFramesProgress,
     step,
-    versions,
-    currentVersionId,
+    previewUrl,
   } = useProjectStore();
-  const currentVersion = versions.find((v) => v.id === currentVersionId) || versions[0];
-
   const progress = step === 'generate'
     ? Math.round(generateHyperFramesProgress)
     : step === 'analyze' ? overallProgress : step === 'result' ? 100 : 0;
@@ -44,11 +40,11 @@ export default function BottomStatusBar() {
 
         <div className="flex items-center gap-1.5">
           <a
-            href={currentVersion?.preview_url ? api.fileUrl(currentVersion.preview_url) : undefined}
+            href={previewUrl || undefined}
             download
-            aria-disabled={!currentVersion?.preview_url}
+            aria-disabled={!previewUrl}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-white/8 text-xs transition-all ${
-              currentVersion?.preview_url
+              previewUrl
                 ? 'bg-white/5 hover:bg-white/10 text-text-secondary hover:text-text-main'
                 : 'bg-white/[0.02] text-text-muted/50 pointer-events-none'
             }`}

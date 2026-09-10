@@ -23,8 +23,8 @@ AGENT_PROMPTS = {
 {"strategy":"一句话叙事策略","scenes":[{"scene_number":1,"headline":"观众可见短标题","subline":"补充说明","chips":["关键词"],"steps":["信息点"]}]}
 要求：逐场覆盖，不写制作术语，不虚构数据，标题不超过16个汉字，所有文字为简体中文。""",
     "visual": """你是高级动态图形视觉导演。依据逐字稿与场景时间，仅输出 JSON：
-{"theme":{"mood":"","palette":["#hex"],"motion":""},"scenes":[{"scene_number":1,"variant":"process|data|knowledge|story","visual_metaphor":"","emphasis":""}]}
-要求：场景形式随内容变化；流程逐节点出现；数据只呈现原稿明确提供的数据；避免整齐划一和PPT感。""",
+{"theme":{"mood":"","palette":["#hex"],"motion":""},"scenes":[{"scene_number":1,"variant":"process|data|knowledge|story","layout":"wide|split-left|split-right|center","visual_metaphor":"","emphasis":""}]}
+要求：场景形式随内容变化；流程逐节点出现；数据只呈现原稿明确提供的数据；相邻场景不得使用相同 layout；避免整齐划一和PPT感。""",
     "timing": """你是动态图形时序与可读性专家。依据逐字稿与场景时间，仅输出 JSON：
 {"rhythm":"","scenes":[{"scene_number":1,"density":"low|medium|high","entry_order":["标题","图形"],"hold_seconds":2.0}],"risks":[]}
 要求：信息至少可读1.5秒；字幕固定底部居中；场景覆盖完整音频；同屏重点不超过两组。""",
@@ -122,9 +122,9 @@ def _code_director_prompt() -> str:
     return """你是 HyperFrames 代码总监。综合三位专家结果，为通用组件渲染器生成唯一创意规格。只输出 JSON：
 {
   "theme":{"background":"#07111f","surface":"rgba(9,20,44,.58)","primary":"#7cb4ff","secondary":"#41e5b5","accent":"#ffb35c"},
-  "scenes":[{"scene_number":1,"variant":"process|data|knowledge|story","headline":"","subline":"","chips":[""],"steps":[""],"values":[{"label":"原稿中的指标","value":"原稿中的值","height":70}]}]
+  "scenes":[{"scene_number":1,"variant":"process|data|knowledge|story","layout":"wide|split-left|split-right|center","headline":"","subline":"","chips":[""],"steps":[""],"values":[{"label":"原稿中的指标","value":"原稿中的值","height":70}]}]
 }
-硬约束：场景数量和编号必须与 source.scenes 完全一致；每场文字基于对应 transcript；观众可见文字全为简体中文；不得出现“场景、步骤、制作、动画、工作流、FrameCraft”等幕后文案；不得编造百分比或事实；流程图逐节点；相邻场景尽量使用不同 variant；每个标题最多16字，每个说明最多32字，每个节点最多12字。"""
+硬约束：场景数量和编号必须与 source.scenes 完全一致；每场文字基于对应 transcript；观众可见文字全为简体中文；不得出现“场景、步骤、制作、动画、工作流、FrameCraft”等幕后文案；不得编造百分比或事实；流程图逐节点；相邻场景尽量使用不同 variant 且不得使用相同 layout；每个标题最多16字，每个说明最多32字，每个节点最多12字。"""
 
 
 def run_creative_team(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:

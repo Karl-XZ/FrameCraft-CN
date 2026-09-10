@@ -11,6 +11,8 @@ const STATUS_LABEL: Record<string, string> = {
   rendering: '渲染中',
   chatting: 'Agent 对话中',
   completed: '已完成',
+  awaiting_local_render: '工程就绪',
+  ready_to_render: '可本地渲染',
   needs_input: '等待补充',
   failed: '失败',
   cancelled: '已取消',

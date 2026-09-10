@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -35,7 +36,10 @@ def main() -> None:
     started = time.perf_counter()
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
-        page = browser.new_page(accept_downloads=True)
+        context = browser.new_context(accept_downloads=True)
+        studio_origin = f"{args.studio.split('://', 1)[0]}://{args.studio.split('://', 1)[1].split('/', 1)[0]}"
+        context.grant_permissions(["local-network-access"], origin=studio_origin)
+        page = context.new_page()
         page.goto(f"{args.studio.rstrip('/')}/projects/new?access_token={token}", wait_until="networkidle")
         page.locator('input[placeholder*="AI 产业观点"]').fill("openJiuwen 网页端真实60秒验收")
         page.locator("select").nth(0).select_option("16:9")
@@ -55,18 +59,20 @@ def main() -> None:
         print(f"upload_ready_seconds={upload_seconds:.2f}", flush=True)
 
         page.get_by_role("button", name="开始 AI 分析").click()
-        page.get_by_role("button", name="确认生成").wait_for(timeout=300_000)
+        generate_button = page.get_by_role("button", name=re.compile("确认生成"))
+        generate_button.wait_for(timeout=300_000)
         analyze_seconds = time.perf_counter() - started - upload_seconds
         print(f"analysis_seconds={analyze_seconds:.2f}", flush=True)
 
-        page.get_by_role("button", name="确认生成").click()
-        page.get_by_text("完整视频", exact=True).wait_for(timeout=300_000)
+        generate_button.click()
+        page.get_by_text("本机视频", exact=True).wait_for(timeout=300_000)
         generate_seconds = time.perf_counter() - started - upload_seconds - analyze_seconds
         print(f"generation_seconds={generate_seconds:.2f}", flush=True)
 
         with page.expect_download(timeout=60_000) as download_info:
             page.locator('a[download]').first.click()
         download_info.value.save_as(args.output)
+        context.close()
         browser.close()
 
     total_seconds = time.perf_counter() - started

@@ -170,6 +170,7 @@ def build_timeline_payload(
                 "scene_number": scene["scene_number"],
                 "scene_id": scene["scene_id"],
                 "variant": scene["variant"],
+                "layout": scene["layout"],
                 "start_time": scene["start"],
                 "end_time": scene["end"],
                 "duration": scene["duration"],
@@ -243,12 +244,14 @@ def render_html_document(
                 "variant": scene["variant"],
                 "steps": scene.get("steps", []),
                 "chips": scene.get("chips", []),
+                "valueCount": len(scene.get("values", [])),
             }
             for scene in scenes
         ],
         ensure_ascii=False,
     )
     title = html.escape(str(project.get("name") or "解说视频"))
+    layout_css = _layout_css(width, height)
     return f"""<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -660,7 +663,9 @@ def render_html_document(
         font-size: {28 if width < 1400 else 18}px;
         line-height: 1.6;
         color: rgba(233, 241, 255, 0.84);
+        display: none;
       }}
+      {layout_css}
       .caption-shell {{
         position: absolute;
         left: 50%;
@@ -738,7 +743,7 @@ def render_html_document(
       const cues = {cue_js};
       const scenes = {scene_js};
 
-      tl.set(".headline, .subline, .chip, .quote-card, .process-board, .data-board, .knowledge-board, .story-board, .scene-tag", {{
+      tl.set(".headline, .subline, .chip, .process-board, .data-board, .knowledge-board, .story-board", {{
         autoAlpha: 0
       }});
       tl.set(".process-step, .metric-card, .bar-card, .satellite, .story-card, .story-dot", {{
@@ -746,11 +751,9 @@ def render_html_document(
       }});
       scenes.forEach((scene) => {{
         const base = "#" + scene.id;
-        tl.fromTo(base + " .scene-tag", {{ y: 20, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.45, ease: "power2.out" }}, scene.start + 0.02);
         tl.fromTo(base + " .headline", {{ y: 34, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.75, ease: "power3.out" }}, scene.start + 0.08);
         tl.fromTo(base + " .subline", {{ y: 28, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.65, ease: "power2.out" }}, scene.start + 0.22);
         tl.fromTo(base + " .chip", {{ y: 18, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.48, stagger: 0.08, ease: "power2.out" }}, scene.start + 0.3);
-        tl.fromTo(base + " .quote-card", {{ y: 24, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.6, ease: "power2.out" }}, scene.start + Math.min(1.1, scene.duration * 0.32));
 
         if (scene.variant === "process") {{
           tl.fromTo(base + " .process-board", {{ x: 56, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.7, ease: "power3.out" }}, scene.start + 0.22);
@@ -759,7 +762,7 @@ def render_html_document(
         if (scene.variant === "data") {{
           tl.fromTo(base + " .data-board", {{ x: 56, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.72, ease: "power3.out" }}, scene.start + 0.18);
           tl.fromTo(base + " .metric-card", {{ y: 24, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.14, ease: "power2.out" }}, scene.start + 0.38);
-          scene.steps.forEach((_, idx) => {{
+          Array.from({{ length: scene.valueCount }}).forEach((_, idx) => {{
             const sel = base + " .bar-card.bar-" + idx;
             tl.fromTo(sel, {{ y: 28, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.48, ease: "power2.out" }}, scene.start + 0.6 + idx * 0.16);
             tl.fromTo(sel + " .bar", {{ height: 0 }}, {{ height: sel && document.querySelector(sel + " .bar") ? document.querySelector(sel + " .bar").dataset.targetHeight : 0, duration: 0.65, ease: "power2.out" }}, scene.start + 0.72 + idx * 0.16);
@@ -774,7 +777,7 @@ def render_html_document(
           tl.fromTo(base + " .story-card, " + base + " .story-dot", {{ y: 24, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.52, stagger: 0.16, ease: "power2.out" }}, scene.start + 0.42);
         }}
 
-        tl.to(base + " .headline, " + base + " .subline, " + base + " .chip, " + base + " .quote-card", {{
+        tl.to(base + " .headline, " + base + " .subline, " + base + " .chip", {{
           autoAlpha: 0,
           y: -22,
           duration: 0.34,
@@ -798,7 +801,7 @@ def render_scene_markup(scene: dict[str, Any], width: int, height: int) -> str:
     chips = "\n".join(f'<div class="chip">{html.escape(text)}</div>' for text in scene["chips"][:4])
     main = render_variant_markup(scene, width, height)
     return f"""
-<section id="{html.escape(scene['scene_id'])}" class="scene clip" data-start="{scene['start']:.3f}" data-duration="{scene['duration']:.3f}">
+<section id="{html.escape(scene['scene_id'])}" class="scene clip variant-{scene['variant']} layout-{scene['layout']} scene-order-{scene['scene_number']}" data-start="{scene['start']:.3f}" data-duration="{scene['duration']:.3f}">
   <div class="scene-shell">
     <div class="headline">{html.escape(scene['headline'])}</div>
     <div class="subline">{html.escape(scene['subline'])}</div>
@@ -812,21 +815,25 @@ def render_scene_markup(scene: dict[str, Any], width: int, height: int) -> str:
 
 def render_variant_markup(scene: dict[str, Any], width: int, height: int) -> str:
     if scene["variant"] == "process":
+        horizontal = width > height and scene.get("layout") in {"wide", "center"}
         step_gap = 172 if height > width else 116
         start_top = 90 if height > width else 72
         steps_html = []
         nodes_html = []
-        for idx, step in enumerate(scene["steps"][:4]):
+        visible_steps = scene["steps"][:4]
+        for idx, step in enumerate(visible_steps):
             top = start_top + idx * step_gap
+            inline = f"left:{4 + idx * (92 / max(1, len(visible_steps))):.2f}%;width:{84 / max(1, len(visible_steps)):.2f}%;top:92px;" if horizontal else f"top:{top}px;"
             steps_html.append(
                 f"""
-      <div class="process-step" style="top:{top}px;">
+      <div class="process-step" style="{inline}">
         <div class="step-index">{idx + 1:02d}</div>
         <div class="step-text">{html.escape(step)}</div>
       </div>
 """
             )
-            nodes_html.append(f'<div class="process-node" style="top:{top + 44}px;"></div>')
+            node_inline = f"left:{12 + idx * (84 / max(1, len(visible_steps))):.2f}%;top:48px;" if horizontal else f"top:{top + 44}px;"
+            nodes_html.append(f'<div class="process-node" style="{node_inline}"></div>')
         return f"""
     <div class="glass-panel process-board">
       <div class="process-rail"></div>
@@ -937,6 +944,7 @@ def _build_scene_specs(
             "end": float(raw.get("end_s") or (float(raw.get("start_s") or 0.0) + float(raw.get("duration_s") or 5.0))),
             "duration": float(raw.get("duration_s") or 5.0),
             "variant": variant,
+            "layout": ["wide", "split-left", "center", "split-right"][(idx - 1) % 4],
             "headline": headline,
             "subline": subline,
             "chips": chips,
@@ -1037,6 +1045,9 @@ def apply_creative_plan(scenes: list[dict[str, Any]], creative_plan: dict[str, A
         if isinstance(item, dict)
     }
     allowed_variants = {"process", "data", "knowledge", "story"}
+    allowed_layouts = {"wide", "split-left", "split-right", "center"}
+    previous_layout = ""
+    layout_cycle = ["wide", "split-left", "center", "split-right"]
     for scene in scenes:
         item = overrides.get(int(scene["scene_number"]))
         if not item:
@@ -1044,6 +1055,12 @@ def apply_creative_plan(scenes: list[dict[str, Any]], creative_plan: dict[str, A
         variant = str(item.get("variant") or "")
         if variant in allowed_variants:
             scene["variant"] = variant
+        layout = str(item.get("layout") or "")
+        if layout in allowed_layouts:
+            scene["layout"] = layout
+        if scene["layout"] == previous_layout:
+            scene["layout"] = layout_cycle[(layout_cycle.index(previous_layout) + 1) % len(layout_cycle)]
+        previous_layout = scene["layout"]
         for key, max_len in (("headline", 20), ("subline", 52)):
             value = normalize_text(str(item.get(key) or ""))[:max_len]
             if value:
@@ -1072,6 +1089,54 @@ def apply_creative_plan(scenes: list[dict[str, Any]], creative_plan: dict[str, A
         scene["core_sub"] = scene["subline"]
         scene["elements"] = [{"kind": scene["variant"], "text": value} for value in scene["steps"]]
     return scenes
+
+
+def _layout_css(width: int, height: int) -> str:
+    if width <= height:
+        return """
+      .variant-knowledge .headline, .variant-knowledge .subline { text-align: center; left: 8%; right: 8%; max-width: none; }
+      .variant-knowledge .chip-row { left: 50%; transform: translateX(-50%); justify-content: center; width: 90%; max-width: none; }
+      .layout-split-right .glass-panel { transform: translateX(26px); }
+      .layout-split-left .glass-panel { transform: translateX(-26px); }
+        """
+    return """
+      .variant-process.layout-wide .headline,
+      .variant-process.layout-center .headline { left: 8%; right: 8%; top: 36px; max-width: none; text-align: center; }
+      .variant-process.layout-wide .subline,
+      .variant-process.layout-center .subline { left: 12%; right: 12%; top: 126px; max-width: none; text-align: center; }
+      .variant-process.layout-wide .chip-row,
+      .variant-process.layout-center .chip-row { left: 50%; top: 205px; transform: translateX(-50%); justify-content: center; width: 80%; max-width: none; }
+      .variant-process.layout-wide .process-board,
+      .variant-process.layout-center .process-board { left: 0; right: 0; top: 320px; width: 100%; height: 300px; }
+      .variant-process.layout-wide .process-rail,
+      .variant-process.layout-center .process-rail { left: 12%; right: 12%; top: 56px; bottom: auto; width: auto; height: 3px; transform: none; }
+      .variant-process.layout-wide .process-step,
+      .variant-process.layout-center .process-step { right: auto; margin: 0; min-height: 138px; }
+      .variant-data.layout-center .headline,
+      .variant-data.layout-split-right .headline { left: 920px; top: 118px; max-width: 700px; }
+      .variant-data.layout-center .subline,
+      .variant-data.layout-split-right .subline { left: 920px; top: 286px; max-width: 700px; }
+      .variant-data.layout-center .chip-row,
+      .variant-data.layout-split-right .chip-row { left: 920px; top: 392px; max-width: 700px; }
+      .variant-data.layout-center .data-board,
+      .variant-data.layout-split-right .data-board { left: 0; right: auto; top: 120px; width: 780px; height: 520px; }
+      .variant-knowledge .headline { left: 8%; right: 8%; top: 26px; max-width: none; text-align: center; }
+      .variant-knowledge .subline { left: 14%; right: 14%; top: 116px; max-width: none; text-align: center; }
+      .variant-knowledge .chip-row { left: 50%; top: 196px; transform: translateX(-50%); justify-content: center; width: 82%; max-width: none; }
+      .variant-knowledge .knowledge-board { left: 10%; right: 10%; top: 300px; width: 80%; height: 340px; }
+      .variant-story .story-board { left: 0; right: auto; top: 104px; width: 760px; height: 536px; }
+      .variant-story .headline { left: 860px; top: 124px; max-width: 760px; }
+      .variant-story .subline { left: 860px; top: 300px; max-width: 720px; }
+      .variant-story .chip-row { left: 860px; top: 420px; max-width: 720px; }
+      .scene-order-5.variant-process.layout-split-left .process-board,
+      .scene-order-5.variant-process.layout-split-right .process-board { left: 0; right: auto; top: 110px; width: 760px; height: 530px; }
+      .scene-order-5.variant-process.layout-split-left .headline,
+      .scene-order-5.variant-process.layout-split-right .headline { left: 860px; top: 120px; max-width: 760px; text-align: left; }
+      .scene-order-5.variant-process.layout-split-left .subline,
+      .scene-order-5.variant-process.layout-split-right .subline { left: 860px; top: 300px; max-width: 720px; text-align: left; }
+      .scene-order-5.variant-process.layout-split-left .chip-row,
+      .scene-order-5.variant-process.layout-split-right .chip-row { left: 860px; top: 420px; transform: none; justify-content: flex-start; width: 720px; }
+    """
 
 
 def safe_css_color(value: Any, fallback: str) -> str:

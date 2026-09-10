@@ -8,7 +8,7 @@ import {
   mapAssetType,
 } from '../api/client';
 import { useProjectStore, type Asset } from '../store/projectStore';
-import { renderLocally } from '../api/localRenderer';
+import { checkLocalRenderer, renderLocally } from '../api/localRenderer';
 
 const TERMINAL_JOB_STATUSES = ['completed', 'failed', 'cancelled', 'needs_input'];
 
@@ -29,6 +29,12 @@ export function useStudioWorkflow() {
 
   const ensureProject = useCallback(async () => {
     if (store.projectId) return store.projectId;
+    const requestedProjectId = new URLSearchParams(window.location.search).get('project');
+    if (requestedProjectId) {
+      await api.getProject(requestedProjectId);
+      store.setProjectId(requestedProjectId);
+      return requestedProjectId;
+    }
     const p = await api.createProject({
       name: 'Agent 解说项目',
       aspect_ratio: store.videoRatio,
@@ -78,7 +84,7 @@ export function useStudioWorkflow() {
       const cur = versions.find((v) => v.id === p.current_version_id) || versions[0];
       store.setCurrentVersionId(cur.id);
       store.setVersion(`v${cur.version_number}.0`);
-      if (cur.preview_url) store.setPreviewUrl(api.fileUrl(cur.preview_url));
+      store.setPreviewUrl(null);
       store.setStep('result');
       store.setTaskText('生成完成');
     } else {
@@ -115,7 +121,7 @@ export function useStudioWorkflow() {
     if (current) {
       store.setCurrentVersionId(current.id);
       store.setVersion(`v${current.version_number}.0`);
-      if (current.preview_url) store.setPreviewUrl(api.fileUrl(current.preview_url));
+      store.setPreviewUrl(null);
       store.setStep('result');
     }
     if (doneText) store.setTaskText(doneText);
@@ -281,15 +287,21 @@ export function useStudioWorkflow() {
     store.setTaskText('正在连接用户电脑上的本地 Renderer');
     store.setGenerateHyperFramesProgress(86);
     const bundle = await api.downloadLocalRenderBundle(bundleUrl);
-    const video = await renderLocally(bundle, fps, (progress, step) => {
+    const localResult = await renderLocally(bundle, fps, (progress, step) => {
       store.setTaskText(step);
       store.setGenerateHyperFramesProgress(Math.min(98, 86 + Math.round(progress * 0.12)));
     });
-    store.setTaskText('正在回传成片并进行视觉验收');
+    store.setTaskText('正在上传临时联系表并进行视觉验收');
     store.setGenerateHyperFramesProgress(99);
-    await api.completeLocalRender(projectId, versionId, video);
+    await api.reviewLocalRender(
+      projectId,
+      versionId,
+      localResult.contactSheet,
+      localResult.mediaValidation,
+    );
     store.setGenerateHyperFramesProgress(100);
-    await refreshVersions(projectId, '本地渲染与视觉验收完成');
+    await refreshVersions(projectId, '本地渲染与视觉验收完成，MP4 仅保留在当前电脑');
+    store.setPreviewUrl(URL.createObjectURL(localResult.video));
   }, [refreshVersions, store]);
 
   const startGenerate = useCallback(async () => {
@@ -308,14 +320,29 @@ export function useStudioWorkflow() {
         ? '4K旗舰版'
         : '1080p';
     const pendingVersions = await api.listVersions(projectId);
-    const pending = pendingVersions.find((version) => version.status === 'awaiting_local_render' || version.status === 'local_render_failed');
+    const pending = pendingVersions.find((version) =>
+      ['awaiting_local_render', 'local_render_failed', 'local_render_ready'].includes(version.status || '')
+    );
     if (pending?.local_render_bundle_url) {
       try {
-        await finishLocalRender(projectId, pending.id, pending.local_render_bundle_url, pending.render_fps || store.frameRate);
+        await finishLocalRender(
+          projectId,
+          pending.id,
+          pending.local_render_bundle_url,
+          pending.render_fps || store.frameRate,
+        );
       } catch (error) {
         store.setError(error instanceof Error ? error.message : '本地渲染未完成');
         store.setTaskText('等待用户电脑本地渲染');
       }
+      return;
+    }
+
+    try {
+      await checkLocalRenderer();
+    } catch (error) {
+      store.setError(error instanceof Error ? error.message : '无法连接本地 Renderer');
+      store.setTaskText('等待本地 Renderer 授权或启动');
       return;
     }
 
@@ -324,7 +351,12 @@ export function useStudioWorkflow() {
       const result = completedJob.result;
       if (result?.render_target === 'local' && result.version_id && result.bundle_url) {
         try {
-          await finishLocalRender(projectId, result.version_id, result.bundle_url, result.fps || store.frameRate);
+          await finishLocalRender(
+            projectId,
+            result.version_id,
+            result.bundle_url,
+            result.fps || store.frameRate,
+          );
         } catch (error) {
           store.setError(error instanceof Error ? error.message : '本地渲染未完成');
           store.setTaskText('等待用户电脑本地渲染');
@@ -486,7 +518,7 @@ export function useStudioWorkflow() {
     await api.activateVersion(projectId, target.id);
     store.setCurrentVersionId(target.id);
     store.setVersion(`v${target.version_number}.0`);
-    if (target.preview_url) store.setPreviewUrl(api.fileUrl(target.preview_url));
+    store.setPreviewUrl(null);
     store.addChatMessage({ id: crypto.randomUUID(), role: 'agent', text: `已撤销到上一版本 v${target.version_number}.0。`, timestamp: Date.now() });
   }, [store]);
 

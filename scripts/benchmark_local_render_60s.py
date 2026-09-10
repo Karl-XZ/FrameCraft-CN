@@ -142,22 +142,25 @@ def main() -> None:
     local_job = wait_local_job(renderer, local.json()["id"], 600)
     video_response = requests.get(f"{renderer}{local_job['download_url']}", timeout=120)
     video_response.raise_for_status()
+    review_response = requests.get(f"{renderer}{local_job['review_url']}", timeout=30)
+    review_response.raise_for_status()
     local_seconds = time.perf_counter() - local_started
 
     validation_started = time.perf_counter()
     complete = session.post(
-        f"{api}/api/projects/{project_id}/versions/{result['version_id']}/local-render-complete",
-        files={"file": ("preview.mp4", video_response.content, "video/mp4")},
+        f"{api}/api/projects/{project_id}/versions/{result['version_id']}/local-render-review",
+        files={"file": ("contact-sheet.jpg", review_response.content, "image/jpeg")},
+        data={"media_json": json.dumps(local_job.get("media_validation") or {})},
         timeout=180,
     )
     if not complete.ok:
-        raise RuntimeError(f"云端回传验收失败（{complete.status_code}）：{complete.text}")
+        raise RuntimeError(f"云端联系表验收失败（{complete.status_code}）：{complete.text}")
     validation_seconds = time.perf_counter() - validation_started
     version = complete.json()
-    final_response = session.get(f"{api}{version['preview_url']}", timeout=120)
-    final_response.raise_for_status()
+    if version.get("preview_url") or version.get("preview_path"):
+        raise RuntimeError("服务器错误地注册了本地 MP4 路径。")
     with tempfile.NamedTemporaryFile(suffix=".mp4") as handle:
-        handle.write(final_response.content)
+        handle.write(video_response.content)
         handle.flush()
         media = probe(Path(handle.name))
 
@@ -172,6 +175,8 @@ def main() -> None:
         "total_seconds": round(time.perf_counter() - overall, 2),
         "duration_seconds": round(float(media["format"]["duration"]), 3),
         "render_target": "local",
+        "server_stores_video": False,
+        "version_status": version.get("status"),
         "passed": True,
     }
     if report["total_seconds"] >= 300:

@@ -37,9 +37,9 @@ React 工作台
   -> 云端生成 HyperFrames HTML 工程包
   -> 浏览器传给用户电脑的 FrameCraft Renderer
   -> 用户电脑 HyperFrames --strict 真实渲染与 ffprobe 检查
-  -> 浏览器回传 MP4
-  -> 云端 DeepSeek V4 Flash Vision 全片抽帧验收
-  -> 注册版本与下载
+  -> 用户电脑生成联系表并上传临时验收图
+  -> 云端 DeepSeek V4 Flash Vision 验收后立即删除联系表
+  -> MP4 在用户电脑预览和下载，服务器只保存工程
 ```
 
 三个专家由 openJiuwen `TeamRuntime` 并行调度，代码总监在专家完成后汇总。每次项目分析都会真实调用模型，追踪信息写入 `outputs/<project_id>/analysis/agent_trace.json`。该文件包含框架名、团队拓扑、各 Agent 模型、耗时和原始结构化结果，可确认任务确实经过 openJiuwen 与 DeepSeek。
@@ -122,10 +122,13 @@ npm install
 npm run local-renderer
 ```
 
-macOS/Linux 也可以运行 `./scripts/start-local-renderer.sh`，Windows 可以双击 `scripts/start-local-renderer.cmd`。本地服务只监听 `127.0.0.1:19186`，不接收 DeepSeek Key 或服务器访问口令。默认允许来源为 `http://1.14.46.26` 和本机开发地址；更换正式域名后可设置：
+macOS/Linux 也可以运行 `./scripts/start-local-renderer.sh`，Windows 可以双击 `scripts/start-local-renderer.cmd`。本地服务只监听 `127.0.0.1:19186`，不接收 DeepSeek Key 或服务器访问口令。公网工作台必须使用 HTTPS；首次点击生成时，Chrome 会询问是否允许该网站访问本地网络，请选择“允许”。如果曾经拒绝，可点击地址栏左侧的站点图标，在网站设置中重新允许本地网络访问。
+
+Renderer 只接受明确列入来源白名单的网页。部署正式域名后设置：
 
 ```bash
 export FRAMECRAFT_LOCAL_RENDERER_ORIGINS='https://your-framecraft.example.com'
+export FRAMECRAFT_LOCAL_RENDERER_CRF=30
 ```
 
 健康检查：
@@ -149,8 +152,9 @@ curl http://127.0.0.1:8022/api/health
 3. 点击开始分析，等待 openJiuwen 团队完成内容、视觉、时序和代码设计。
 4. 查看方案后点击生成。
 5. 网页连接用户电脑上的 Renderer，执行 HyperFrames 严格渲染与本地 `ffprobe` 检查。
-6. 网页回传 MP4，云端完成全片联系表和视觉 Agent 验收。
-7. 在项目聊天中提出修改要求，Agent 会在当前项目上下文内生成新版本。
+6. Renderer 在本机生成联系表，网页只上传这张临时验收图；云端视觉 Agent 验收后立即删除它。
+7. MP4 直接从本机 Renderer 进入当前浏览器预览和下载，不上传服务器。
+8. 在项目聊天中提出修改要求，Agent 会在当前项目上下文内生成新版本。
 
 ## 质量门槛
 
@@ -180,16 +184,22 @@ backend/venv-openjiuwen/bin/python scripts/benchmark_openjiuwen_60s.py \
 | 2 | 9:16 | 18.11 秒 | 60.34 秒 | 78.54 秒 | 88 |
 | 3 | 16:9 | 18.12 秒 | 56.33 秒 | 74.55 秒 | 88 |
 
-三轮最大端到端耗时 78.54 秒，平均 76.53 秒。原始结构化结果位于 `benchmark-results/openjiuwen-60s-20260910-005244.json`。本地渲染模式下，云端只负责 ASR、Agent、工程打包和最终视觉验收，整体耗时还会受到用户电脑性能与上传速度影响。
+三轮最大端到端耗时 78.54 秒，平均 76.53 秒。原始结构化结果位于 `benchmark-results/openjiuwen-60s-20260910-005244.json`。本地渲染模式下，云端只负责 ASR、Agent、工程打包和联系表视觉验收；MP4 不经过公网传输。
+
+公网网页纯本地渲染验收中，60 秒音频从上传到本机下载共 167.42 秒；刷新项目后基于已保存工程重新渲染只需 63.26 秒。服务器无 MP4、成片路径和残留联系表，记录见 `benchmark-results/pure-local-server-ui-20260910.json`。
 
 ## 本地渲染安全边界
 
 - Renderer 只绑定回环地址，不开放局域网或公网端口。
-- 浏览器下载工程包时使用服务器访问口令；口令不会传给 Renderer。
+- 浏览器下载工程包时使用服务器访问口令；全局口令不会传给 Renderer。
+- MP4 始终保留在用户电脑。服务器只接收一张临时联系表用于视觉验收，接口返回后立即删除图片，只保存验收 JSON。
+- 服务端 API 会忽略任何云端渲染请求，历史预览接口固定返回 `410`，因此不能通过跨设备链接获取 MP4。
+- 后端每次启动都会清理输出目录内的历史 MP4 和联系表，并把仍有 HyperFrames 工程的旧版本迁移为可本地复渲染状态。
+- 刷新或关闭页面后，本机 Blob 预览会失效；用户可随时从服务器保存的同一 HyperFrames 工程重新本地渲染。
 - Renderer 只接收 ZIP 二进制，拒绝目录穿越路径，并在系统临时目录隔离执行。
 - 同一时间只允许一个本地渲染任务，临时工程与 MP4 默认一小时后删除。
 - Renderer 不提供 FFmpeg 合成兜底；HyperFrames 严格渲染失败会原样返回错误。
-- 云端收到 MP4 后仍要检查完整时长、音视频流和视觉质量，未通过不会激活版本。
+- 本机先用 `ffprobe` 检查完整时长和音视频流，再由云端依据临时联系表检查视觉质量；任一项未通过都不会登记为可复渲染版本。
 
 ## 产物
 
@@ -201,10 +211,8 @@ outputs/<project_id>/
     creative_plan.json
     agent_trace.json
   <version_id>/
-    preview.mp4
     subtitles.srt
     timeline.json
-    visual-review.jpg
     agent_visual_review.json
     agent_trace.json
     local_render_manifest.json
