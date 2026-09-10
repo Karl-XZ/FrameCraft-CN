@@ -66,7 +66,7 @@ export default function LandingHero() {
               <span className="text-text-secondary">一步进入 HyperFrames 解说工作流</span>
             </h1>
             <p className="text-lg text-text-secondary max-w-md leading-relaxed">
-              上传解说音频，或直接粘贴讲稿文字，Agent 会自动拆场景、生成动画、同步字幕并完成 HyperFrames 成片渲染。
+              上传解说音频，或直接粘贴讲稿文字。云端 Agent 自动完成设计，HyperFrames 在用户电脑真实渲染，素材与算力更可控。
             </p>
             <div className="flex items-center gap-4">
               <Link
@@ -107,7 +107,7 @@ export default function LandingHero() {
             />
             <FeatureCard
               title="HyperFrames 高级生成"
-              description="基于 HyperFrames 技术生成可复现的 HTML 动画工程与最终成片"
+              description="云端生成可复现的 HTML 动画工程，用户电脑负责真实渲染最终成片"
               icon={<Film className="w-5 h-5 text-secondary" />}
               gradient="bg-secondary/15 text-secondary"
             />

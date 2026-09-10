@@ -145,6 +145,13 @@ export interface BackendJob {
   plan_progress?: number;
   logs?: string[];
   warnings?: Array<{ code?: string; message: string; asset_id?: string }>;
+  result?: {
+    render_target?: string;
+    version_id?: string;
+    bundle_url?: string;
+    fps?: number;
+    expected_duration_s?: number;
+  };
 }
 
 export interface BackendChatMessage {
@@ -204,6 +211,10 @@ export interface BackendVersion {
   cover_url: string | null;
   publish_copy_url: string | null;
   hyperframes_url: string | null;
+  status?: string;
+  local_render_bundle_url?: string | null;
+  render_fps?: number;
+  expected_duration_s?: number;
 }
 
 export interface CreateProjectBody {
@@ -268,12 +279,27 @@ export const api = {
       body: JSON.stringify(opts || {}),
     }),
   getEditPlan: (projectId: string) => request<EditPlan>(`/api/projects/${projectId}/edit-plan`),
-  generate: (projectId: string, opts?: { resolution?: string; fps?: number; strategy?: string }) =>
+  generate: (projectId: string, opts?: { resolution?: string; fps?: number; strategy?: string; render_target?: string }) =>
     request<BackendJob>(`/api/projects/${projectId}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(opts || {}),
     }),
+  downloadLocalRenderBundle: async (path: string) => {
+    const response = await authFetch(`${API_BASE}${path}`);
+    if (!response.ok) throw new Error(await response.text());
+    return response.blob();
+  },
+  completeLocalRender: async (projectId: string, versionId: string, video: Blob) => {
+    const form = new FormData();
+    form.append('file', video, 'preview.mp4');
+    const response = await authFetch(
+      `${API_BASE}/api/projects/${projectId}/versions/${versionId}/local-render-complete`,
+      { method: 'POST', body: form },
+    );
+    if (!response.ok) throw new Error(await response.text());
+    return response.json() as Promise<BackendVersion>;
+  },
   applyPatch: (projectId: string, patch: Record<string, unknown>) =>
     request<BackendJob>(`/api/projects/${projectId}/apply-patch`, {
       method: 'POST',

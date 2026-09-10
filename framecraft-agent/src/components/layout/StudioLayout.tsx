@@ -62,7 +62,7 @@ export default function StudioLayout() {
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-semibold text-text-main flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-primary-light" />
-                    正在生成 HyperFrames 解说成片
+                    正在生成工程并由用户电脑渲染
                   </span>
                   <span className="text-xs text-primary-light font-mono">{generateHyperFramesProgress}%</span>
                 </div>
@@ -74,7 +74,7 @@ export default function StudioLayout() {
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-semibold text-text-main flex items-center gap-2">
                     <Zap className="w-4 h-4 text-secondary" />
-                    正在校验字幕、时间线与视觉细节
+                    正在校验本地成片、字幕与视觉细节
                   </span>
                   <span className="text-xs text-secondary font-mono">{Math.max(generateDraftProgress, Math.round(generateHyperFramesProgress * 0.9))}%</span>
                 </div>

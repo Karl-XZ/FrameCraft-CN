@@ -5,6 +5,7 @@ import json
 import mimetypes
 import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +76,7 @@ class GenerateIn(BaseModel):
     resolution: str = "1080p"
     fps: int = 24
     strategy: str = "complete"
+    render_target: str = "local"
 
 
 class ChatIn(BaseModel):
@@ -92,7 +94,12 @@ class ScriptIn(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "mode": "openjiuwen-multi-agent"}
+    render_target = os.getenv("FRAMECRAFT_RENDER_TARGET", "local").strip().lower()
+    return {
+        "ok": True,
+        "mode": "openjiuwen-multi-agent",
+        "default_render_target": "server" if render_target == "server" else "local",
+    }
 
 
 @app.post("/api/projects")
@@ -409,6 +416,37 @@ def version_hyperframes(project_id: str, version_id: str):
     if path.is_file():
         return FileResponse(path)
     raise HTTPException(404, "HyperFrames zip not found")
+
+
+@app.post("/api/projects/{project_id}/versions/{version_id}/local-render-complete")
+async def complete_local_render(project_id: str, version_id: str, file: UploadFile = File(...)):
+    version = _version(project_id, version_id)
+    if version.get("status") not in {"awaiting_local_render", "local_render_failed"}:
+        raise HTTPException(409, "该版本当前不等待本地渲染结果。")
+    suffix = Path(file.filename or "preview.mp4").suffix.lower()
+    if suffix != ".mp4":
+        raise HTTPException(400, "本地渲染结果必须是 MP4。")
+    max_bytes = int(os.getenv("FRAMECRAFT_LOCAL_RENDER_UPLOAD_MAX_BYTES", str(700 * 1024 * 1024)))
+    target_dir = Path(version["version_dir"])
+    target_dir.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix="local-render-", suffix=".mp4", dir=target_dir)
+    os.close(fd)
+    temp_path = Path(temp_name)
+    written = 0
+    try:
+        with temp_path.open("wb") as output:
+            while chunk := await file.read(1024 * 1024):
+                written += len(chunk)
+                if written > max_bytes:
+                    raise HTTPException(413, "本地渲染文件超过上传大小限制。")
+                output.write(chunk)
+        return await asyncio.to_thread(runner.finalize_local_render, project_id, version_id, temp_path)
+    except HTTPException:
+        temp_path.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        temp_path.unlink(missing_ok=True)
+        raise HTTPException(422, str(exc)) from exc
 
 
 @app.get("/api/projects/{project_id}/versions/{version_id}/draft")

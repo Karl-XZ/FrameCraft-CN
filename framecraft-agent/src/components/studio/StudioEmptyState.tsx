@@ -15,7 +15,7 @@ export default function StudioEmptyState() {
           开始创建你的 AI 解说视频
         </h2>
         <p className="text-sm text-text-muted max-w-sm mx-auto leading-relaxed">
-          上传解说音频，或先写讲稿文字，Agent 会自动完成分镜、动画、字幕与 HyperFrames 成片渲染
+          上传解说音频，或先写讲稿文字。Agent 完成分镜、动画与字幕后，由用户电脑执行 HyperFrames 真实渲染
         </p>
       </div>
 

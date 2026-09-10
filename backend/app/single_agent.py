@@ -394,6 +394,22 @@ class SingleAgentRunner:
             {
                 "type": "function",
                 "function": {
+                    "name": "register_local_render",
+                    "description": "将已经完成设计的 HyperFrames 工程注册为待用户本地真实渲染版本。服务器默认必须使用此工具，不要调用服务器渲染。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "version_dir": {"type": "string"},
+                            "fps": {"type": "integer", "minimum": 15, "maximum": 60},
+                        },
+                        "required": ["version_dir"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "write_chat",
                     "description": "向用户聊天栏写一条 agent 消息，可用于阶段更新、提问或最终说明。",
                     "parameters": {
@@ -461,6 +477,11 @@ class SingleAgentRunner:
                 job_id,
                 str(args["version_dir"]),
                 str(args.get("preview") or ""),
+            ),
+            "register_local_render": lambda: self._tool_register_local_render(
+                job_id,
+                str(args["version_dir"]),
+                int(args.get("fps") or 24),
             ),
             "write_chat": lambda: self._tool_write_chat(job_id, str(args["content"]), str(args.get("status") or "chat")),
         }
@@ -753,6 +774,12 @@ class SingleAgentRunner:
         quality: str,
         timeout_sec: int,
     ) -> dict[str, Any]:
+        job = store.snapshot()["jobs"].get(job_id) or {}
+        if self._render_target(job) == "local":
+            return {
+                "ok": False,
+                "error": "当前项目使用用户本地渲染。请完成 HyperFrames 工程后调用 register_local_render。",
+            }
         hf_dir = self._resolve_read_path(job_id, project_dir)
         if not hf_dir.is_dir():
             return {"ok": False, "error": f"不是目录：{hf_dir}"}
@@ -857,6 +884,149 @@ class SingleAgentRunner:
         version = store.mutate(op)
         return {"ok": True, "version": store.public_version(version)}
 
+    def _tool_register_local_render(self, job_id: str, version_dir: str, fps: int = 24) -> dict[str, Any]:
+        snapshot = store.snapshot()
+        job = snapshot["jobs"][job_id]
+        pid = job["project_id"]
+        vdir = self._resolve_write_path(job_id, version_dir)
+        hyperframes_dir = vdir / "hyperframes"
+        index_path = hyperframes_dir / "index.html"
+        timeline_path = vdir / "timeline.json"
+        if not index_path.is_file() or not timeline_path.is_file():
+            raise RuntimeError("本地渲染工程缺少 hyperframes/index.html 或 timeline.json。")
+        ensure_version_subtitles(pid, vdir)
+        timeline = _safe_json(timeline_path)
+        expected_duration = float(
+            timeline.get("total_duration") or timeline.get("duration_s") or timeline.get("duration") or 0
+        )
+        if expected_duration <= 0:
+            root_match = re.search(r'data-duration="([0-9.]+)"', index_path.read_text(encoding="utf-8"))
+            expected_duration = float(root_match.group(1)) if root_match else 0
+        if expected_duration <= 0:
+            raise RuntimeError("无法从本地渲染工程确定成片时长。")
+        manifest = {
+            "schema_version": 1,
+            "project_id": pid,
+            "version_id": vdir.name,
+            "fps": max(15, min(int(fps), 60)),
+            "quality": "standard",
+            "expected_duration_s": round(expected_duration, 3),
+            "renderer": "hyperframes-strict",
+        }
+        (vdir / "local_render_manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        (hyperframes_dir / "local-render-manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        bundle = vdir / "hyperframes_project.zip"
+        bundle.unlink(missing_ok=True)
+        shutil.make_archive(str(bundle.with_suffix("")), "zip", root_dir=vdir, base_dir="hyperframes")
+
+        def op(data):
+            existing = [v for v in data["versions"].values() if v["project_id"] == pid]
+            number = max([int(v.get("version_number", 0)) for v in existing] or [0]) + 1
+            vid = vdir.name
+            version = {
+                "id": vid,
+                "project_id": pid,
+                "version_number": number,
+                "status": "awaiting_local_render",
+                "preview_url": None,
+                "draft_url": None,
+                "timeline_url": f"/api/projects/{pid}/versions/{vid}/timeline",
+                "subtitles_url": f"/api/projects/{pid}/versions/{vid}/subtitles",
+                "cover_url": None,
+                "publish_copy_url": None,
+                "hyperframes_url": f"/api/projects/{pid}/versions/{vid}/hyperframes",
+                "local_render_bundle_url": f"/api/projects/{pid}/versions/{vid}/hyperframes",
+                "render_fps": manifest["fps"],
+                "expected_duration_s": manifest["expected_duration_s"],
+                "version_dir": str(vdir),
+                "preview_path": None,
+                "created_at": store.now_iso(),
+            }
+            data["versions"][vid] = version
+            data["projects"][pid]["status"] = "awaiting_local_render"
+            data["projects"][pid]["updated_at"] = store.now_iso()
+            data["jobs"][job_id]["result"] = {
+                "render_target": "local",
+                "version_id": vid,
+                "bundle_url": version["local_render_bundle_url"],
+                "fps": manifest["fps"],
+                "expected_duration_s": manifest["expected_duration_s"],
+            }
+            return version
+
+        version = store.mutate(op)
+        return {"ok": True, "version": store.public_version(version), "manifest": manifest}
+
+    def finalize_local_render(self, project_id: str, version_id: str, uploaded_path: Path) -> dict[str, Any]:
+        snapshot = store.snapshot()
+        version = snapshot["versions"].get(version_id)
+        if not version or version.get("project_id") != project_id:
+            raise RuntimeError("本地渲染版本不存在。")
+        if version.get("status") not in {"awaiting_local_render", "local_render_failed"}:
+            raise RuntimeError("该版本当前不等待本地渲染结果。")
+        version_dir = Path(version["version_dir"])
+        preview = version_dir / "preview.mp4"
+        uploaded_path.replace(preview)
+        expected_duration = float(version.get("expected_duration_s") or 0)
+        try:
+            media = self._probe_rendered_media(preview, expected_duration)
+            sheet = self._extract_contact_sheet(preview, version_dir / "visual-review.jpg", expected_duration)
+            project = snapshot["projects"].get(project_id) or {}
+            creative_plan = _safe_json(store.project_dir(project_id) / "analysis" / "creative_plan.json")
+            transcript_path = store.project_dir(project_id) / "source" / "transcript.txt"
+            source_text = transcript_path.read_text(encoding="utf-8", errors="replace") if transcript_path.is_file() else ""
+            review = run_visual_review(
+                sheet,
+                {
+                    "project": project.get("name"),
+                    "duration_s": expected_duration,
+                    "source_transcript": source_text,
+                    "scenes": creative_plan.get("scenes") or [],
+                },
+            )
+            review["media_validation"] = media
+            review["review_is_model_generated"] = True
+            (version_dir / "agent_visual_review.json").write_text(
+                json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            if not review.get("pass") or float(review.get("score") or 0) < 75:
+                raise RuntimeError(
+                    f"视觉 Agent 验收未通过：{'; '.join(review.get('issues') or [review.get('summary') or '质量不足'])}"
+                )
+        except Exception:
+            def failed_op(data):
+                if version_id in data["versions"]:
+                    data["versions"][version_id]["status"] = "local_render_failed"
+            store.mutate(failed_op)
+            raise
+
+        def op(data):
+            current = data["versions"][version_id]
+            current["status"] = "completed"
+            current["preview_path"] = str(preview)
+            current["preview_url"] = f"/api/projects/{project_id}/versions/{version_id}/preview"
+            project_data = data["projects"][project_id]
+            project_data["current_version_id"] = version_id
+            project_data["status"] = "completed"
+            project_data["updated_at"] = store.now_iso()
+            data.setdefault("chat", {}).setdefault(project_id, []).append(
+                {
+                    "id": store.new_id("msg"),
+                    "project_id": project_id,
+                    "role": "agent",
+                    "content": "本地 HyperFrames 渲染成片已回传，并通过完整时长、音视频流和视觉 Agent 验收。",
+                    "status": "done",
+                    "created_at": store.now_iso(),
+                }
+            )
+            return current
+
+        return store.public_version(store.mutate(op))
+
     def _tool_write_chat(self, job_id: str, content: str, status: str) -> dict[str, Any]:
         pid = store.snapshot()["jobs"][job_id]["project_id"]
         message = {
@@ -926,9 +1096,29 @@ class SingleAgentRunner:
             creative_plan=creative_plan,
         )
 
-        self._set_step(job_id, 76, "正在使用 HyperFrames 真实渲染 MP4")
+        version_dir.joinpath("agent_trace.json").write_text(
+            trace_path.read_text(encoding="utf-8") if trace_path.is_file() else "{}",
+            encoding="utf-8",
+        )
         render_fps = int((job.get("payload") or {}).get("fps") or 24)
         render_fps = max(15, min(render_fps, 60))
+        if self._render_target(job) == "local":
+            self._set_step(job_id, 86, "HyperFrames 工程已就绪，等待用户电脑真实渲染")
+            registered = self._tool_register_local_render(job_id, str(version_dir), render_fps)
+            if not registered.get("ok"):
+                raise RuntimeError("本地渲染工程注册失败。")
+            self._tool_write_chat(
+                job_id,
+                (
+                    f"视频设计与 HyperFrames 工程已完成：{summary['scene_count']} 个场景、"
+                    f"{summary['caption_count']} 条字幕，总时长约 {summary['duration_s']} 秒。"
+                    "网页正在连接用户电脑上的本地 Renderer，服务器不会执行视频渲染。"
+                ),
+                "awaiting_local_render",
+            )
+            return
+
+        self._set_step(job_id, 76, "正在使用 HyperFrames 真实渲染 MP4")
         render = self._tool_render_hyperframes_project(
             job_id=job_id,
             project_dir=str(boot["project_dir"]),
@@ -944,10 +1134,6 @@ class SingleAgentRunner:
             )
 
         self._set_step(job_id, 86, "视觉 Agent 正在检查全片抽帧")
-        version_dir.joinpath("agent_trace.json").write_text(
-            trace_path.read_text(encoding="utf-8") if trace_path.is_file() else "{}",
-            encoding="utf-8",
-        )
         media = self._probe_rendered_media(version_dir / "preview.mp4", summary["duration_s"])
         sheet = self._extract_contact_sheet(version_dir / "preview.mp4", version_dir / "visual-review.jpg", summary["duration_s"])
         review = run_visual_review(
@@ -1175,6 +1361,12 @@ class SingleAgentRunner:
             if prepared.mode == "audio"
             else "当前是讲稿模式。后端已经准备好了旁白、逐字稿与 scene_seed；你需要基于这些输入完成动画设计、字幕与成片。"
         )
+        render_note = (
+            "当前默认由用户电脑渲染：完成 HyperFrames HTML 工程、字幕和时间线后，必须调用 register_local_render；"
+            "不要调用 render_hyperframes_project 或 register_version。"
+            if self._render_target(job) == "local"
+            else "当前允许服务器执行 HyperFrames 严格渲染并注册完整版本。"
+        )
         return f"""
 项目名：{project.get('name')}
 任务类型：{job['type']}
@@ -1183,6 +1375,7 @@ class SingleAgentRunner:
 目标风格：{project.get('target_style')}
 输出语言：{project.get('output_language')}
 {mode_note}
+{render_note}
 
 关键文件：
 - prepared source metadata: {prepared.metadata_path}
@@ -1209,6 +1402,23 @@ class SingleAgentRunner:
                 return False
             return True
         if job["type"] in {"generate", "apply_patch"}:
+            local_result = job.get("result") or {}
+            if local_result.get("render_target") == "local":
+                version = snapshot["versions"].get(str(local_result.get("version_id") or ""))
+                if not version:
+                    self._fail(job_id, "未注册待本地渲染版本。")
+                    return False
+                version_dir = Path(version["version_dir"])
+                required = [
+                    version_dir / "hyperframes_project.zip",
+                    version_dir / "timeline.json",
+                    version_dir / "hyperframes" / "index.html",
+                ]
+                missing = [str(path) for path in required if not path.exists()]
+                if missing:
+                    self._fail(job_id, "本地渲染包缺少关键产物：\n" + "\n".join(missing))
+                    return False
+                return True
             version_id = (snapshot["projects"].get(pid) or {}).get("current_version_id")
             version = snapshot["versions"].get(str(version_id or ""))
             if not version:
@@ -1282,15 +1492,26 @@ class SingleAgentRunner:
             if job["status"] != "needs_input":
                 job["status"] = "completed"
             job["progress"] = max(float(job.get("progress") or 0), 100.0)
-            job["current_step"] = "完成"
+            local_pending = (job.get("result") or {}).get("render_target") == "local"
+            job["current_step"] = "等待用户电脑本地渲染" if local_pending else "完成"
             job["completed_at"] = store.now_iso()
             project = data["projects"].get(job["project_id"])
             if project and job["status"] != "needs_input":
-                project["status"] = "completed" if job["type"] != "analyze" else "planning"
+                project["status"] = (
+                    "awaiting_local_render"
+                    if local_pending
+                    else "completed" if job["type"] != "analyze" else "planning"
+                )
                 project["updated_at"] = store.now_iso()
             return job
 
         store.mutate(op)
+
+    @staticmethod
+    def _render_target(job: dict[str, Any]) -> str:
+        requested = str((job.get("payload") or {}).get("render_target") or "").strip().lower()
+        default = os.getenv("FRAMECRAFT_RENDER_TARGET", "local").strip().lower()
+        return "server" if (requested or default) == "server" else "local"
 
     def _needs_input(self, job_id: str, message: str) -> None:
         pid = store.snapshot()["jobs"][job_id]["project_id"]
