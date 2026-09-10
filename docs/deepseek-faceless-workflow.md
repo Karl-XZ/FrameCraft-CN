@@ -1,5 +1,7 @@
 # openJiuwen + DeepSeek 解说视频工作流
 
+> 历史文档：本文是早期无人物解说流程摘要。当前三种输入、阿里云语音和本地 HyperFrames 验收规范见 [一键科普视频生成工作流](SCIENCE_VIDEO_WORKFLOW.md)。
+
 ## 输入准备
 
 - 音频模式保留用户原音频，本地 Whisper 生成简体中文逐字稿、词级时间戳与场景种子。

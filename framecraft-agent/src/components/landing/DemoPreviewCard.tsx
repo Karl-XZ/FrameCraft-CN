@@ -16,13 +16,13 @@ export default function DemoPreviewCard() {
 
       <div className="relative rounded-lg overflow-hidden bg-black/50 aspect-video flex items-center justify-center border border-dashed border-white/10">
         <p className="text-xs text-text-muted px-4 text-center">
-          上传素材并由 Agent 分析后，此处显示 HyperFrames 预览成片
+          输入一个科学问题后，此处显示 HyperFrames 科普成片
         </p>
       </div>
 
       <div className="space-y-2 text-xs text-text-muted">
-        <p>· Agent 分析音频或讲稿并生成视频方案</p>
-        <p>· 用户电脑通过 HyperFrames 真实渲染 faceless explainer 成片</p>
+        <p>· 支持主题、原稿、视频或音频三种输入</p>
+        <p>· DeepSeek 设计科学叙事，阿里云完成语音处理</p>
         <p>· 保留可继续修改的 HyperFrames 源工程</p>
       </div>
     </GlassCard>

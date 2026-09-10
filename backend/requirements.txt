@@ -6,6 +6,5 @@ imageio>=2.34
 json5>=0.9
 openai>=1.54
 openjiuwen==0.1.17.post1
-edge-tts>=7.2.0
 requests>=2.32
 playwright>=1.50

@@ -40,6 +40,9 @@ export function useStudioWorkflow() {
       aspect_ratio: store.videoRatio,
       target_duration: store.targetDuration,
       target_style: store.targetStyle,
+      input_mode: store.inputMode,
+      topic: store.topic,
+      requirements: store.requirements,
       script_text: store.scriptText,
       output_language: store.outputLanguage,
       generate_draft: store.generateDraft,
@@ -73,6 +76,9 @@ export function useStudioWorkflow() {
     store.setVideoRatio(p.aspect_ratio);
     store.setTargetDuration(p.target_duration);
     store.setTargetStyle(p.target_style);
+    if (p.input_mode) store.setInputMode(p.input_mode);
+    if (typeof p.topic === 'string') store.setTopic(p.topic);
+    if (typeof p.requirements === 'string') store.setRequirements(p.requirements);
     if (p.output_language) store.setOutputLanguage(p.output_language);
     if (typeof p.script_text === 'string') store.setScriptText(p.script_text);
     if (typeof p.generate_draft === 'boolean') store.setGenerateDraft(p.generate_draft);
@@ -249,11 +255,19 @@ export function useStudioWorkflow() {
 
   const startAnalyze = useCallback(async () => {
     const projectId = await ensureProject();
-    if (store.assets.length === 0 && !store.scriptText.trim()) {
-      store.setError('请先上传一条解说音频，或填写讲稿文字');
+    if (store.inputMode === 'topic' && !store.topic.trim()) {
+      store.setError('请先填写科普主题');
       return;
     }
-    if (store.scriptText.trim()) {
+    if (store.inputMode === 'script' && !store.scriptText.trim()) {
+      store.setError('请先填写完整科普文案');
+      return;
+    }
+    if (store.inputMode === 'media' && store.assets.length === 0) {
+      store.setError('请先上传一条视频或音频');
+      return;
+    }
+    if (store.inputMode === 'script' && store.scriptText.trim()) {
       await api.putScript(projectId, store.scriptText);
     }
     store.setStep('analyze');
@@ -264,14 +278,22 @@ export function useStudioWorkflow() {
     store.setPlanProgress(0);
     store.setPlanSubstep(null);
     const job = await api.analyze(projectId);
-    watchJob(job.id, async () => {
-      const plan = await api.getEditPlan(projectId);
-      store.setEditPlan(plan);
-      store.setStep('plan');
-      store.setTaskText('分析完成，请确认剪辑方案');
-      await refreshAssets(projectId);
-    });
-  }, [ensureProject, refreshAssets, store, watchJob]);
+    watchJob(
+      job.id,
+      async () => {
+        const plan = await api.getEditPlan(projectId);
+        store.setEditPlan(plan);
+        store.setStep('plan');
+        store.setTaskText('分析完成，请确认剪辑方案');
+        await refreshAssets(projectId);
+      },
+      async (terminalJob) => {
+        if (terminalJob.status === 'needs_input' || terminalJob.status === 'failed') {
+          await refreshChat(projectId);
+        }
+      },
+    );
+  }, [ensureProject, refreshAssets, refreshChat, store, watchJob]);
 
   const persistAsset = useCallback(async (assetId: string, body: Record<string, unknown>) => {
     await api.updateAsset(assetId, body);
@@ -485,7 +507,7 @@ export function useStudioWorkflow() {
     store.setGenerateHyperFramesProgress(0);
     store.setGenerateDraftProgress(0);
     const job = await api.applyPatch(projectId, patch);
-    store.addChatMessage({ id: crypto.randomUUID(), role: 'agent', text: '已接受修改，正在重新生成解说视频预览…', timestamp: Date.now() });
+    store.addChatMessage({ id: crypto.randomUUID(), role: 'agent', text: '已接受修改，正在重新生成科普视频预览…', timestamp: Date.now() });
     watchJob(job.id, async (completedJob) => {
       const result = completedJob.result;
       if (result?.render_target === 'local' && result.version_id && result.bundle_url) {

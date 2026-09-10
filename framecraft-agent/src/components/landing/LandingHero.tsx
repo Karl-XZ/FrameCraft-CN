@@ -55,18 +55,18 @@ export default function LandingHero() {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs text-primary-light font-medium">
                 <Sparkles className="w-3.5 h-3.5" />
-                AI 驱动的解说视频生成引擎
+                AI 驱动的一键科普视频生成器
               </div>
             </div>
             <h1 className="text-5xl font-extrabold leading-tight tracking-tight" style={{ letterSpacing: '-0.02em' }}>
-              <span className="text-text-main">让音频或讲稿</span>
+              <span className="text-text-main">把一个科学问题</span>
               <br />
-              <span className="gradient-text">从输入到成片</span>
+              <span className="gradient-text">讲清楚，也演明白</span>
               <br />
-              <span className="text-text-secondary">一步进入 HyperFrames 解说工作流</span>
+              <span className="text-text-secondary">一键生成旁白同步的动态图解</span>
             </h1>
             <p className="text-lg text-text-secondary max-w-md leading-relaxed">
-              上传解说音频，或直接粘贴讲稿文字。云端 Agent 自动完成设计，HyperFrames 在用户电脑真实渲染，素材与算力更可控。
+              输入主题自动写稿，也可以锁定自己的文案，或上传视频与音频。DeepSeek 负责科学叙事，阿里云处理语音，HyperFrames 在用户电脑真实渲染。
             </p>
             <div className="flex items-center gap-4">
               <Link
@@ -74,7 +74,7 @@ export default function LandingHero() {
                 className="gradient-btn px-7 py-3.5 rounded-xl text-base font-bold flex items-center gap-2 shadow-glow"
               >
                 <Zap className="w-4 h-4" />
-                开始生成视频
+                开始生成科普视频
               </Link>
               <Link
                 to="/studio"
@@ -95,25 +95,25 @@ export default function LandingHero() {
         {/* Features */}
         <div className="space-y-6">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-text-main">为什么选择 FrameCraft Agent</h2>
-            <p className="text-sm text-text-muted mt-2">一站式 faceless explainer 解说生成方案</p>
+            <h2 className="text-2xl font-bold text-text-main">为什么选择 FrameCraft 科普视频</h2>
+            <p className="text-sm text-text-muted mt-2">从科学叙事、云端语音到语义动画的一体化生成</p>
           </div>
           <div className="grid grid-cols-4 gap-4">
             <FeatureCard
-              title="理解音频与讲稿"
-              description="自动转写内容、整理结构并生成场景种子，不需要手工先做时间线"
+              title="三种输入方式"
+              description="主题自动写稿、文案原样配音、视频或音频云端转写，输入边界清晰"
               icon={<Brain className="w-5 h-5 text-primary-light" />}
               gradient="bg-primary/15 text-primary-light"
             />
             <FeatureCard
-              title="HyperFrames 高级生成"
-              description="云端生成可复现的 HTML 动画工程，用户电脑负责真实渲染最终成片"
+              title="科学语义动画"
+              description="用机制、尺度、对比、时间线和系统关系解释旁白，拒绝装饰性 PPT"
               icon={<Film className="w-5 h-5 text-secondary" />}
               gradient="bg-secondary/15 text-secondary"
             />
             <FeatureCard
-              title="保留项目工程"
-              description="输出 MP4 的同时保留 HyperFrames 源工程，便于继续修改和再渲染"
+              title="证据与工程可追溯"
+              description="保留来源台账、字幕、时间线和 HyperFrames 工程，方便复核与再渲染"
               icon={<Download className="w-5 h-5 text-accent" />}
               gradient="bg-accent/15 text-accent"
             />
@@ -130,7 +130,7 @@ export default function LandingHero() {
         <div className="space-y-8 py-8">
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-bold text-text-main">工作流程</h2>
-            <p className="text-sm text-text-muted">从上传到导出，五步完成专业级解说视频</p>
+            <p className="text-sm text-text-muted">从问题到解释，五步完成专业级科普视频</p>
           </div>
           <ProcessFlow />
         </div>

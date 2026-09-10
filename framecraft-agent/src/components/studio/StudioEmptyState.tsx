@@ -12,17 +12,17 @@ export default function StudioEmptyState() {
 
       <div className="text-center space-y-3">
         <h2 className="text-2xl font-extrabold text-text-main tracking-tight">
-          开始创建你的 AI 解说视频
+          开始创建你的 AI 科普视频
         </h2>
         <p className="text-sm text-text-muted max-w-sm mx-auto leading-relaxed">
-          上传解说音频，或先写讲稿文字。Agent 完成分镜、动画与字幕后，由用户电脑执行 HyperFrames 真实渲染
+          Agent 会把主题、原稿或原音频转化为逐镜头科学解释，再由用户电脑执行 HyperFrames 真实渲染
         </p>
       </div>
 
       <div className="flex items-center gap-4">
         <GradientButton size="lg" className="rounded-xl px-8 py-4">
           <Upload className="w-4 h-4" />
-          上传素材
+          准备科普方案
         </GradientButton>
       </div>
 

@@ -66,9 +66,12 @@ def default_db() -> dict[str, Any]:
             "pro_model": "deepseek-v4-pro",
             "vision_model": "deepseek-v4-flash-vision-exp",
             "base_url": "https://api.deepseek.com",
-            "asr_model": "whisper-small",
-            "tts_model": "edge-tts",
-            "tts_voice": "zh-CN-XiaoxiaoNeural",
+            "asr_model": "qwen3-asr-flash",
+            "tts_model": "qwen3-tts-flash",
+            "tts_voice": "Cherry",
+            "dashscope_api_key": "",
+            "dashscope_base_url": "https://dashscope.aliyuncs.com/api/v1",
+            "dashscope_compatible_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         },
     }
 
@@ -89,6 +92,15 @@ def load_db() -> dict[str, Any]:
         data.setdefault(key, value)
     if data.get("settings", {}).get("provider") != "deepseek":
         data["settings"] = base["settings"]
+    else:
+        for key, value in base["settings"].items():
+            data["settings"].setdefault(key, value)
+        if data["settings"].get("asr_model") in {"whisper-small", "whisper.cpp"}:
+            data["settings"]["asr_model"] = "qwen3-asr-flash"
+        if data["settings"].get("tts_model") == "edge-tts":
+            data["settings"]["tts_model"] = "qwen3-tts-flash"
+        if str(data["settings"].get("tts_voice") or "").startswith("zh-CN-"):
+            data["settings"]["tts_voice"] = "Cherry"
     return data
 
 
@@ -182,6 +194,10 @@ def public_settings(settings: dict[str, Any]) -> dict[str, Any]:
     env_base = os.getenv("DEEPSEEK_BASE_URL", "").strip()
     out["api_key"] = ""
     out["api_key_configured"] = bool(env_key or settings.get("api_key"))
+    out["dashscope_api_key"] = ""
+    out["dashscope_api_key_configured"] = bool(
+        os.getenv("DASHSCOPE_API_KEY", "").strip() or settings.get("dashscope_api_key")
+    )
     if env_base:
         out["base_url"] = env_base
     return out

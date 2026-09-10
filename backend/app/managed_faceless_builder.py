@@ -5,11 +5,12 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from .ingest import build_subtitle_cues, normalize_words
 
 
-def materialize_managed_faceless_version(
+def materialize_science_video_version(
     project: dict[str, Any],
     prepared: Any,
     version_dir: Path,
@@ -55,7 +56,7 @@ def materialize_managed_faceless_version(
     }
 
 
-def build_managed_analysis(project: dict[str, Any], prepared: Any) -> dict[str, Any]:
+def build_science_video_analysis(project: dict[str, Any], prepared: Any) -> dict[str, Any]:
     words = _load_words(prepared.transcript_path)
     cues = build_subtitle_cues(words)
     scene_seed = _load_json(prepared.scene_seed_path)
@@ -72,7 +73,7 @@ def build_managed_analysis(project: dict[str, Any], prepared: Any) -> dict[str, 
         "project_name": project.get("name"),
         "mode": prepared.mode,
         "style_family": style_family,
-        "summary": f"基于{prepared.mode}输入的 faceless explainer 结构化分析，准备 {len(scenes)} 个场景。",
+        "summary": f"基于{prepared.mode}输入构建科学解释路径，准备 {len(scenes)} 个语义动画场景。",
         "scene_count": len(scenes),
         "total_duration_s": round(total_duration, 3),
         "source_text_preview": normalize_text(prepared.source_text)[:320],
@@ -84,17 +85,20 @@ def build_managed_analysis(project: dict[str, Any], prepared: Any) -> dict[str, 
                 "end": scene["end"],
                 "duration": scene["duration"],
                 "variant": scene["variant"],
+                "semanticMotion": scene.get("semantic_motion", "system"),
+                "semantic_motion": scene.get("semantic_motion"),
                 "headline": scene["headline"],
                 "subline": scene["subline"],
                 "chips": scene["chips"],
                 "quote": scene["quote"],
+                "source_label": scene.get("source_label"),
             }
             for scene in scenes
         ],
         "captions": cues,
     }
     edit_plan = {
-        "video_concept": scenes[0]["headline"] if scenes else "解说视频",
+        "video_concept": scenes[0]["headline"] if scenes else "科普视频",
         "target_duration": round(total_duration, 3),
         "style": _style_label(str(project.get("target_style") or "")),
         "hook": scenes[0]["headline"] if scenes else "用更清晰的结构讲清重点",
@@ -104,6 +108,7 @@ def build_managed_analysis(project: dict[str, Any], prepared: Any) -> dict[str, 
             {
                 "scene_number": scene["scene_number"],
                 "variant": scene["variant"],
+                "semantic_motion": scene.get("semantic_motion"),
                 "headline": scene["headline"],
                 "subline": scene["subline"],
                 "chips": scene["chips"],
@@ -116,7 +121,7 @@ def build_managed_analysis(project: dict[str, Any], prepared: Any) -> dict[str, 
         ],
         "broll_plan": [],
         "meta": {
-            "generator": "managed_faceless_builder",
+            "generator": "science_video_builder",
             "style_family": style_family,
             "caption_count": len(cues),
         },
@@ -142,6 +147,12 @@ def aspect_dimensions(aspect_ratio: str) -> tuple[int, int]:
 
 def dominant_style_family(target_style: str, text: str) -> str:
     style = (target_style or "").strip().lower()
+    if style == "mechanism_lab":
+        return "process"
+    if style == "data_science":
+        return "data"
+    if style == "nature_story":
+        return "story"
     if style == "data_story":
         return "data"
     if style == "process_breakdown":
@@ -170,6 +181,7 @@ def build_timeline_payload(
                 "scene_number": scene["scene_number"],
                 "scene_id": scene["scene_id"],
                 "variant": scene["variant"],
+                "semantic_motion": scene.get("semantic_motion"),
                 "layout": scene["layout"],
                 "start_time": scene["start"],
                 "end_time": scene["end"],
@@ -178,6 +190,7 @@ def build_timeline_payload(
                 "subline": scene["subline"],
                 "chips": scene["chips"],
                 "elements": scene["elements"],
+                "source_label": scene.get("source_label"),
             }
         )
     return {
@@ -200,7 +213,7 @@ def build_visual_review_payload(
     return {
         "pass": True,
         "project_id": project.get("id"),
-        "checked_at_stage": "managed_faceless_builder",
+        "checked_at_stage": "science_video_builder",
         "summary": "字幕固定居中放在底部安全区；主要视觉块分散布局；未使用面向制作的占位文案；HyperFrames 工程可复渲染。",
         "checks": [
             {"name": "captions_center_bottom", "pass": True},
@@ -250,7 +263,7 @@ def render_html_document(
         ],
         ensure_ascii=False,
     )
-    title = html.escape(str(project.get("name") or "解说视频"))
+    title = html.escape(str(project.get("name") or "科普视频"))
     layout_css = _layout_css(width, height)
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -405,7 +418,7 @@ def render_html_document(
         position: absolute;
         left: 0;
         top: {420 if height > width else 290}px;
-        display: flex;
+        display: none;
         flex-wrap: wrap;
         gap: 14px;
         max-width: {780 if height > width else 960}px;
@@ -427,6 +440,70 @@ def render_html_document(
         border: 1px solid rgba(255,255,255,0.1);
         box-shadow: 0 28px 64px rgba(0, 6, 22, 0.28);
       }}
+      .science-board {{
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: {500 if height > width else 280}px;
+        width: 100%;
+        height: {820 if height > width else 540}px;
+        border-radius: 42px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 50% 50%, rgba(93,154,255,.14), transparent 34%),
+          linear-gradient(145deg, rgba(27, 58, 101, 0.78), rgba(10, 30, 58, 0.5));
+        border: 2px solid rgba(190,218,255,0.2);
+        box-shadow: 0 34px 90px rgba(0, 6, 24, 0.34), inset 0 1px 0 rgba(255,255,255,.08);
+      }}
+      .science-label {{
+        padding: 17px 24px;
+        border-radius: 22px;
+        background: rgba(238, 246, 255, 0.09);
+        border: 1px solid rgba(255,255,255,0.12);
+        font-size: {38 if width < 1400 else 34}px;
+        line-height: 1.35;
+        font-weight: 700;
+      }}
+      .comparison-board {{ display: grid; grid-template-columns: 1fr 120px 1fr; gap: 24px; align-items: center; padding: 54px; }}
+      .compare-side {{ height: 76%; border-radius: 34px; padding: 30px; display: flex; flex-direction: column; justify-content: space-between; background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.1); }}
+      .compare-side:last-child {{ background: linear-gradient(145deg, rgba(65,229,181,0.11), rgba(255,179,92,0.05)); }}
+      .compare-glyph {{ flex: 1; position: relative; margin-top: 18px; overflow: hidden; border-radius: 24px; }}
+      .compare-ray {{ position: absolute; left: 0; right: 0; top: 50%; height: 8px; border-radius: 99px; background: linear-gradient(90deg, transparent, {primary}, transparent); box-shadow: 0 0 28px rgba(124,180,255,.4); }}
+      .flow-dot {{ position: absolute; top: calc(50% - 18px); left: 2%; width: 36px; height: 36px; border-radius: 50%; background: {primary}; box-shadow: 0 0 34px rgba(124,180,255,.72); animation: flowAcross 3.2s linear infinite; }}
+      .flow-dot:nth-child(3n) {{ top: calc(50% - 62px); transform: scale(.72); }}
+      .flow-dot:nth-child(3n + 1) {{ top: calc(50% + 28px); transform: scale(.82); }}
+      .compare-side:last-child .flow-dot {{ background: {secondary}; box-shadow: 0 0 24px rgba(65,229,181,.55); animation-direction: reverse; }}
+      .compare-axis {{ width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center; color: {primary}; border: 2px solid rgba(124,180,255,0.46); box-shadow: 0 0 0 14px rgba(124,180,255,0.07); font-size: 24px; font-weight: 900; animation: nodePulse 2.8s ease-in-out infinite; }}
+      .mechanism-board {{ padding: 42px 54px; }}
+      .mechanism-track {{ position: absolute; inset: 8% 5%; width: 90%; height: 84%; overflow: visible; }}
+      .mechanism-track path {{ fill: none; stroke: url(#mechanism-gradient); stroke-width: 5; stroke-linecap: round; stroke-dasharray: 18 14; animation: dashTravel 3s linear infinite; }}
+      .mechanism-node {{ position: absolute; width: 270px; transform: translate(-50%, -50%); text-align: center; }}
+      .mechanism-dot {{ width: 82px; height: 82px; margin: 0 auto 24px; border-radius: 50%; background: {primary}; box-shadow: 0 0 0 20px rgba(124,180,255,0.1), 0 0 70px rgba(124,180,255,0.55); animation: mechanismPulse 2.2s ease-in-out infinite; }}
+      .mechanism-particle {{ position: absolute; left: 8%; top: 67%; width: 28px; height: 28px; border-radius: 50%; background: #fff; box-shadow: -50px 0 35px rgba(124,180,255,.18), 0 0 34px {primary}; animation: diagonalParticle 4.2s ease-in-out infinite; }}
+      .scale-board {{ display: grid; grid-template-columns: 54% 46%; align-items: center; padding: 28px 50px; }}
+      .scale-field {{ position: relative; height: 100%; display: grid; place-items: center; }}
+      .scale-ring {{ position: absolute; border: 2px solid rgba(124,180,255,0.28); border-radius: 50%; animation: ringBreathe 4s ease-in-out infinite; }}
+      .scale-ring.r1 {{ width: 170px; height: 170px; }}
+      .scale-ring.r2 {{ width: 310px; height: 310px; animation-delay: -.8s; }}
+      .scale-ring.r3 {{ width: 450px; height: 450px; animation-delay: -1.6s; }}
+      .scale-core {{ width: 90px; height: 90px; border-radius: 50%; background: {accent}; box-shadow: 0 0 80px rgba(255,179,92,.68); }}
+      .scale-list {{ display: grid; gap: 18px; }}
+      .timeline-board {{ padding: 50px 46px; }}
+      .timeline-curve {{ position: absolute; left: 8%; right: 8%; top: 55%; height: 5px; transform: rotate(-13deg); transform-origin: center; background: linear-gradient(90deg, {primary}, {secondary}); box-shadow: 0 0 28px rgba(124,180,255,.28); }}
+      .timeline-marker {{ position: absolute; width: 270px; transform: translate(-50%, -50%); text-align: center; }}
+      .timeline-marker .science-label {{ margin-top: 34px; }}
+      .timeline-dot {{ width: 34px; height: 34px; margin: 0 auto; border-radius: 50%; background: {secondary}; box-shadow: 0 0 0 12px rgba(65,229,181,.1); animation: nodePulse 2.6s ease-in-out infinite; }}
+      .system-board {{ display: grid; place-items: center; }}
+      .system-board::before, .system-board::after {{ content: ""; position: absolute; left: 12%; right: 12%; top: 50%; height: 2px; background: linear-gradient(90deg, transparent, rgba(124,180,255,.55), transparent); }}
+      .system-board::after {{ left: 50%; right: auto; top: 10%; bottom: 10%; width: 2px; height: auto; background: linear-gradient(180deg, transparent, rgba(65,229,181,.5), transparent); }}
+      .system-core {{ width: 420px; min-height: 190px; display: grid; place-items: center; text-align: center; padding: 34px; border-radius: 50%; background: rgba(124,180,255,.18); border: 2px solid rgba(124,180,255,.42); box-shadow: 0 0 90px rgba(80,135,255,.28); z-index: 2; }}
+      .system-orbit {{ position: absolute; width: 54%; height: 66%; border-radius: 50%; border: 2px dashed rgba(255,255,255,.26); animation: orbitSpin 24s linear infinite; }}
+      .system-links {{ position: absolute; inset: 4%; width: 92%; height: 92%; overflow: visible; }}
+      .system-links path {{ fill: none; stroke: rgba(124,180,255,.52); stroke-width: 4; stroke-dasharray: 14 10; animation: dashTravel 3.4s linear infinite; }}
+      .system-links circle {{ fill: {secondary}; filter: drop-shadow(0 0 12px rgba(65,229,181,.8)); animation: mechanismPulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }}
+      .system-item {{ position: absolute; width: 360px; z-index: 2; }}
+      .system-item.i0 {{ left: 5%; top: 10%; }} .system-item.i1 {{ right: 5%; top: 10%; }}
+      .system-item.i2 {{ left: 7%; bottom: 10%; }} .system-item.i3 {{ right: 7%; bottom: 10%; }}
       .process-board {{
         right: 0;
         top: {520 if height > width else 120}px;
@@ -465,6 +542,8 @@ def render_html_document(
         bottom: 140px;
         background: linear-gradient(180deg, rgba(110, 168, 255, 0.6), rgba(65, 229, 181, 0.15));
         transform: translateX(-50%);
+        background-size: 100% 220%;
+        animation: signalTravel 2.6s linear infinite;
       }}
       .process-node {{
         position: absolute;
@@ -621,6 +700,8 @@ def render_html_document(
         width: 4px;
         border-radius: 999px;
         background: linear-gradient(180deg, rgba(124, 180, 255, 0.86), rgba(112, 232, 191, 0.2));
+        background-size: 100% 220%;
+        animation: signalTravel 3.2s linear infinite;
       }}
       .story-card {{
         position: absolute;
@@ -639,6 +720,7 @@ def render_html_document(
         border-radius: 999px;
         background: #7cb4ff;
         box-shadow: 0 0 0 10px rgba(124, 180, 255, 0.16);
+        animation: nodePulse 2.8s ease-in-out infinite;
       }}
       .story-card-title {{
         font-size: {24 if width < 1400 else 15}px;
@@ -665,11 +747,21 @@ def render_html_document(
         color: rgba(233, 241, 255, 0.84);
         display: none;
       }}
+      .source-line {{
+        position: absolute;
+        left: 0;
+        bottom: {170 if height > width else 112}px;
+        max-width: 82%;
+        font-size: {34 if width < 1400 else 30}px;
+        color: rgba(240, 247, 255, 0.88);
+        letter-spacing: 0.02em;
+        z-index: 18;
+      }}
       {layout_css}
       .caption-shell {{
         position: absolute;
         left: 50%;
-        bottom: {70 if height > width else 48}px;
+        bottom: {84 if height > width else 70}px;
         transform: translateX(-50%);
         z-index: 20;
         width: min(88%, {780 if height > width else 1160}px);
@@ -688,7 +780,7 @@ def render_html_document(
         border: 1px solid rgba(255,255,255,0.12);
         box-shadow: 0 22px 50px rgba(0,0,0,0.22);
         text-align: center;
-        font-size: {34 if width < 1400 else 24}px;
+        font-size: {46 if width < 1400 else 38}px;
         line-height: 1.42;
         font-weight: 700;
         color: #f8fbff;
@@ -713,6 +805,19 @@ def render_html_document(
         0%, 100% {{ opacity: 0.9; transform: scaleY(0.98); }}
         50% {{ opacity: 1; transform: scaleY(1); }}
       }}
+      @keyframes signalTravel {{
+        0% {{ background-position: 0 100%; }}
+        100% {{ background-position: 0 -100%; }}
+      }}
+      @keyframes horizontalSignal {{ 0% {{ background-position: 100% 0; }} 100% {{ background-position: -100% 0; }} }}
+      @keyframes particleTravel {{ 0% {{ left: 8%; opacity: 0; }} 8% {{ opacity: 1; }} 92% {{ opacity: 1; }} 100% {{ left: 91%; opacity: 0; }} }}
+      @keyframes diagonalParticle {{ 0% {{ left: 8%; top: 67%; opacity: 0; }} 25% {{ left: 34%; top: 31%; opacity: 1; }} 58% {{ left: 64%; top: 62%; opacity: 1; }} 100% {{ left: 91%; top: 25%; opacity: 0; }} }}
+      @keyframes dashTravel {{ to {{ stroke-dashoffset: -64; }} }}
+      @keyframes mechanismPulse {{ 0%,100% {{ transform: scale(.88); }} 50% {{ transform: scale(1.08); }} }}
+      @keyframes raySweep {{ 0%,100% {{ transform: translateX(-8%) scaleX(.86); }} 50% {{ transform: translateX(6%) scaleX(1); }} }}
+      @keyframes flowAcross {{ 0% {{ left: 2%; opacity: 0; }} 12% {{ opacity: 1; }} 88% {{ opacity: 1; }} 100% {{ left: 92%; opacity: 0; }} }}
+      @keyframes ringBreathe {{ 0%,100% {{ transform: scale(.96); opacity: .4; }} 50% {{ transform: scale(1.04); opacity: .92; }} }}
+      @keyframes orbitSpin {{ to {{ transform: rotate(360deg); }} }}
     </style>
   </head>
   <body>
@@ -743,7 +848,7 @@ def render_html_document(
       const cues = {cue_js};
       const scenes = {scene_js};
 
-      tl.set(".headline, .subline, .chip, .process-board, .data-board, .knowledge-board, .story-board", {{
+      tl.set(".headline, .subline, .chip, .process-board, .data-board, .knowledge-board, .story-board, .science-board", {{
         autoAlpha: 0
       }});
       tl.set(".process-step, .metric-card, .bar-card, .satellite, .story-card, .story-dot", {{
@@ -754,6 +859,8 @@ def render_html_document(
         tl.fromTo(base + " .headline", {{ y: 34, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.75, ease: "power3.out" }}, scene.start + 0.08);
         tl.fromTo(base + " .subline", {{ y: 28, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.65, ease: "power2.out" }}, scene.start + 0.22);
         tl.fromTo(base + " .chip", {{ y: 18, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.48, stagger: 0.08, ease: "power2.out" }}, scene.start + 0.3);
+        tl.fromTo(base + " .science-board", {{ scale: 0.96, y: 34, autoAlpha: 0 }}, {{ scale: 1, y: 0, autoAlpha: 1, duration: 0.82, ease: "power3.out" }}, scene.start + 0.2);
+        tl.fromTo(base + " .science-label", {{ y: 18, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.16, ease: "power2.out" }}, scene.start + 0.48);
 
         if (scene.variant === "process") {{
           tl.fromTo(base + " .process-board", {{ x: 56, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.7, ease: "power3.out" }}, scene.start + 0.22);
@@ -800,6 +907,7 @@ def render_scene_markup(scene: dict[str, Any], width: int, height: int) -> str:
     quote = html.escape(scene["quote"])
     chips = "\n".join(f'<div class="chip">{html.escape(text)}</div>' for text in scene["chips"][:4])
     main = render_variant_markup(scene, width, height)
+    source = f'<div class="source-line">{html.escape(scene["source_label"])}</div>' if scene.get("source_label") else ""
     return f"""
 <section id="{html.escape(scene['scene_id'])}" class="scene clip variant-{scene['variant']} layout-{scene['layout']} scene-order-{scene['scene_number']}" data-start="{scene['start']:.3f}" data-duration="{scene['duration']:.3f}">
   <div class="scene-shell">
@@ -807,6 +915,7 @@ def render_scene_markup(scene: dict[str, Any], width: int, height: int) -> str:
     <div class="subline">{html.escape(scene['subline'])}</div>
     <div class="chip-row">{chips}</div>
     {main}
+    {source}
     <div class="quote-card">{quote}</div>
   </div>
 </section>
@@ -814,6 +923,9 @@ def render_scene_markup(scene: dict[str, Any], width: int, height: int) -> str:
 
 
 def render_variant_markup(scene: dict[str, Any], width: int, height: int) -> str:
+    semantic = render_semantic_science_markup(scene)
+    if semantic:
+        return semantic
     if scene["variant"] == "process":
         horizontal = width > height and scene.get("layout") in {"wide", "center"}
         step_gap = 172 if height > width else 116
@@ -907,6 +1019,70 @@ def render_variant_markup(scene: dict[str, Any], width: int, height: int) -> str
 """
 
 
+def render_semantic_science_markup(scene: dict[str, Any]) -> str:
+    motion = str(scene.get("semantic_motion") or "").lower()
+    labels = [html.escape(str(item)) for item in scene.get("steps", [])[:4] if str(item).strip()]
+    if not labels:
+        labels = [html.escape(scene["headline"]), html.escape(scene["subline"])]
+    if len(labels) == 1:
+        labels.append(html.escape(scene["subline"]))
+
+    if motion == "comparison":
+        flow_dots = "".join(f'<span class="flow-dot" style="animation-delay:-{index * .5:.1f}s"></span>' for index in range(6))
+        return f"""
+    <div class="science-board comparison-board">
+      <div class="compare-side"><div class="science-label">{labels[0]}</div><div class="compare-glyph"><div class="compare-ray"></div>{flow_dots}</div></div>
+      <div class="compare-axis">对比</div>
+      <div class="compare-side"><div class="science-label">{labels[1]}</div><div class="compare-glyph"><div class="compare-ray"></div>{flow_dots}</div></div>
+    </div>
+"""
+    if motion == "mechanism":
+        nodes = []
+        count = min(4, len(labels))
+        positions = [(11, 68), (36, 31), (64, 62), (89, 25)]
+        for idx, label in enumerate(labels[:count]):
+            left, top = positions[idx]
+            nodes.append(
+                f'<div class="mechanism-node" style="left:{left:.1f}%;top:{top:.1f}%"><div class="mechanism-dot" style="animation-delay:-{idx * .45:.2f}s"></div><div class="science-label">{label}</div></div>'
+            )
+        return f"""
+    <div class="science-board mechanism-board">
+      <svg class="mechanism-track" viewBox="0 0 1000 500" preserveAspectRatio="none"><defs><linearGradient id="mechanism-gradient"><stop stop-color="{html.escape('#7cb4ff')}"/><stop offset="1" stop-color="{html.escape('#41e5b5')}"/></linearGradient></defs><path d="M45 370 C210 360 235 105 360 120 S555 355 650 315 S805 90 955 105"/></svg>
+      <div class="mechanism-particle"></div>{''.join(nodes)}
+    </div>
+"""
+    if motion == "scale":
+        items = "".join(f'<div class="science-label">{label}</div>' for label in labels[:3])
+        return f"""
+    <div class="science-board scale-board">
+      <div class="scale-field"><div class="scale-ring r3"></div><div class="scale-ring r2"></div><div class="scale-ring r1"></div><div class="scale-core"></div></div>
+      <div class="scale-list">{items}</div>
+    </div>
+"""
+    if motion == "timeline":
+        markers = []
+        count = min(4, len(labels))
+        for idx, label in enumerate(labels[:count]):
+            left = 10 + idx * (80 / max(1, count - 1))
+            top = 68 - idx * (36 / max(1, count - 1))
+            size = 34 + idx * 12
+            markers.append(
+                f'<div class="timeline-marker" style="left:{left:.1f}%;top:{top:.1f}%"><div class="timeline-dot" style="width:{size}px;height:{size}px;animation-delay:-{idx * .5:.2f}s"></div><div class="science-label">{label}</div></div>'
+            )
+        return f"""
+    <div class="science-board timeline-board"><div class="timeline-curve"></div>{''.join(markers)}</div>
+"""
+    if motion == "system":
+        items = "".join(f'<div class="science-label system-item i{idx}">{label}</div>' for idx, label in enumerate(labels[:4]))
+        return f"""
+    <div class="science-board system-board">
+      <svg class="system-links" viewBox="0 0 1000 500" preserveAspectRatio="none"><path d="M120 105 C300 120 330 210 500 250 M880 105 C700 120 670 210 500 250 M130 405 C305 375 340 290 500 250 M870 405 C695 375 660 290 500 250"/><circle cx="500" cy="250" r="14"/></svg>
+      <div class="system-orbit"></div><div class="system-core science-label">{html.escape(scene['core_title'])}</div>{items}
+    </div>
+"""
+    return ""
+
+
 def _build_scene_specs(
     project: dict[str, Any],
     scene_seed: dict[str, Any],
@@ -932,11 +1108,28 @@ def _build_scene_specs(
         if not transcript:
             continue
         clauses = split_clauses(transcript)
-        variant = choose_scene_variant(family, transcript, idx)
-        headline = choose_headline(transcript, idx)
-        subline = choose_subline(clauses)
+        semantic_motion = str(raw.get("motion") or "").strip().lower()
+        motion_variant = {
+            "mechanism": "process",
+            "scale": "data",
+            "comparison": "data",
+            "timeline": "story",
+            "system": "knowledge",
+        }.get(semantic_motion)
+        variant = motion_variant or choose_scene_variant(family, transcript, idx)
+        headline = normalize_text(str(raw.get("chapter_title") or ""))[:20] or choose_headline(transcript, idx)
+        subline = normalize_text(str(raw.get("visual_claim") or ""))[:32] or choose_subline(clauses)[:32]
         chips = choose_chips(clauses)
         steps = choose_steps(transcript, clauses, variant)
+        sources = list(raw.get("evidence_sources") or [])
+        source_label = ""
+        if sources:
+            evidence = sources[0]
+            url = str(evidence.get("url") or "")
+            domain = urlparse(url).netloc.removeprefix("www.")
+            source_label = " · ".join(
+                part for part in ["来源", str(evidence.get("organization") or ""), str(evidence.get("page") or ""), domain] if part
+            )
         scene = {
             "scene_number": int(raw.get("sceneNumber") or idx),
             "scene_id": str(raw.get("sceneId") or f"scene_{idx}"),
@@ -944,6 +1137,7 @@ def _build_scene_specs(
             "end": float(raw.get("end_s") or (float(raw.get("start_s") or 0.0) + float(raw.get("duration_s") or 5.0))),
             "duration": float(raw.get("duration_s") or 5.0),
             "variant": variant,
+            "semantic_motion": semantic_motion or "system",
             "layout": ["wide", "split-left", "center", "split-right"][(idx - 1) % 4],
             "headline": headline,
             "subline": subline,
@@ -952,9 +1146,12 @@ def _build_scene_specs(
             "quote": transcript,
             "core_title": chips[0] if chips else headline,
             "core_sub": subline,
+            "source_label": source_label,
         }
         if variant == "data":
-            scene["values"] = build_metric_values(chips, idx)
+            scene["values"] = build_metric_values(chips, transcript)
+            if not scene["values"]:
+                scene["variant"] = "knowledge"
             scene["elements"] = [{"kind": "metric", "label": item["label"], "value": item["value"]} for item in scene["values"]]
         else:
             scene["elements"] = [{"kind": "step", "text": step} for step in steps]
@@ -1005,8 +1202,11 @@ def choose_chips(clauses: list[str]) -> list[str]:
             chips.append(text)
         if len(chips) >= 4:
             break
-    while len(chips) < 3:
-        chips.append(["拆解", "执行", "交付", "验证"][len(chips)])
+    if not chips:
+        for clause in clauses[:3]:
+            cleaned = re.sub(r"[的了和与在是]", "", clause).strip()
+            if cleaned:
+                chips.append(cleaned[:8])
     return chips[:4]
 
 
@@ -1018,21 +1218,20 @@ def choose_steps(transcript: str, clauses: list[str], variant: str) -> list[str]
         return steps[:4]
     cleaned = [normalize_text(item) for item in clauses if normalize_text(item)]
     if variant == "data":
-        return cleaned[:3] or ["信号上升", "执行聚焦", "结果收束"]
+        return cleaned[:3] or [transcript[:14]]
     return cleaned[:4] or [transcript[:14]]
 
 
-def build_metric_values(chips: list[str], idx: int) -> list[dict[str, Any]]:
-    labels = (chips + ["聚焦", "协同", "落地"])[:3]
-    base = 54 + idx * 7
+def build_metric_values(chips: list[str], transcript: str) -> list[dict[str, Any]]:
+    numbers = re.findall(r"\d+(?:\.\d+)?(?:%|％|倍|万|亿|千米|米|厘米|毫米|秒|分钟|小时|年|摄氏度|度)?", transcript)
     values = []
-    for offset, label in enumerate(labels):
-        height = min(92, base + offset * 12)
+    for offset, display in enumerate(numbers[:3]):
+        label = chips[offset] if offset < len(chips) else "原文数据"
         values.append(
             {
                 "label": label,
-                "value": "重点",
-                "height": height,
+                "value": display,
+                "height": min(90, 45 + offset * 18),
             }
         )
     return values
@@ -1045,6 +1244,13 @@ def apply_creative_plan(scenes: list[dict[str, Any]], creative_plan: dict[str, A
         if isinstance(item, dict)
     }
     allowed_variants = {"process", "data", "knowledge", "story"}
+    allowed_semantics = {
+        "mechanism": {"process"},
+        "scale": {"data"},
+        "comparison": {"data"},
+        "timeline": {"story"},
+        "system": {"knowledge"},
+    }
     allowed_layouts = {"wide", "split-left", "split-right", "center"}
     previous_layout = ""
     layout_cycle = ["wide", "split-left", "center", "split-right"]
@@ -1055,18 +1261,21 @@ def apply_creative_plan(scenes: list[dict[str, Any]], creative_plan: dict[str, A
         variant = str(item.get("variant") or "")
         if variant in allowed_variants:
             scene["variant"] = variant
+        semantic = str(item.get("semantic_motion") or "").strip().lower()
+        if semantic in allowed_semantics and variant in allowed_semantics[semantic]:
+            scene["semantic_motion"] = semantic
         layout = str(item.get("layout") or "")
         if layout in allowed_layouts:
             scene["layout"] = layout
         if scene["layout"] == previous_layout:
             scene["layout"] = layout_cycle[(layout_cycle.index(previous_layout) + 1) % len(layout_cycle)]
         previous_layout = scene["layout"]
-        for key, max_len in (("headline", 20), ("subline", 52)):
+        for key, max_len in (("headline", 20), ("subline", 32)):
             value = normalize_text(str(item.get(key) or ""))[:max_len]
             if value:
                 scene[key] = value
         for key, limit, max_len in (("chips", 4, 10), ("steps", 4, 16)):
-            values = [normalize_text(str(value))[:max_len] for value in item.get(key) or []]
+            values = list(dict.fromkeys(normalize_text(str(value))[:max_len] for value in item.get(key) or []))
             values = [value for value in values if value]
             if values:
                 scene[key] = values[:limit]
@@ -1084,7 +1293,9 @@ def apply_creative_plan(scenes: list[dict[str, Any]], creative_plan: dict[str, A
                         "height": max(24, min(94, int(value.get("height") or 60))),
                     }
                 )
-        scene["values"] = supplied_values or build_metric_values(scene["chips"], scene["scene_number"])
+        scene["values"] = supplied_values or build_metric_values(scene["chips"], scene["quote"])
+        if scene["variant"] == "data" and not scene["values"]:
+            scene["variant"] = "knowledge"
         scene["core_title"] = scene["chips"][0] if scene["chips"] else scene["headline"]
         scene["core_sub"] = scene["subline"]
         scene["elements"] = [{"kind": scene["variant"], "text": value} for value in scene["steps"]]
@@ -1157,13 +1368,17 @@ def normalize_text(text: str) -> str:
 
 def _style_label(style: str) -> str:
     labels = {
+        "science_explainer": "科学编辑风",
+        "mechanism_lab": "机制拆解",
+        "data_science": "数据科普",
+        "nature_story": "自然叙事",
         "faceless_explainer": "通用解说",
         "data_story": "数据观点",
         "process_breakdown": "流程拆解",
         "knowledge_burst": "知识科普",
         "storytelling": "叙事讲述",
     }
-    return labels.get(style, "解说视频")
+    return labels.get(style, "科普视频")
 
 
 def _load_json(path: Path | None) -> dict[str, Any]:

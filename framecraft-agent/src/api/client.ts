@@ -108,6 +108,9 @@ export interface BackendProject {
   aspect_ratio: string;
   target_style: string;
   target_duration: number;
+  input_mode?: 'topic' | 'script' | 'media';
+  topic?: string;
+  requirements?: string;
   output_language?: string;
   script_text?: string;
   generate_draft?: boolean;
@@ -209,6 +212,7 @@ export interface BackendVersion {
   draft_url: string | null;
   timeline_url: string | null;
   subtitles_url: string | null;
+  source_ledger_url?: string | null;
   cover_url: string | null;
   publish_copy_url: string | null;
   hyperframes_url: string | null;
@@ -225,6 +229,9 @@ export interface CreateProjectBody {
   target_style?: string;
   output_language?: string;
   script_text?: string;
+  input_mode?: 'topic' | 'script' | 'media';
+  topic?: string;
+  requirements?: string;
   generate_draft?: boolean;
   keep_hyperframes?: boolean;
 }
@@ -239,7 +246,10 @@ export const api = {
         name: body.name,
         aspect_ratio: body.aspect_ratio || '9:16',
         target_duration: body.target_duration || 60,
-        target_style: body.target_style || 'faceless_explainer',
+        target_style: body.target_style || 'science_explainer',
+        input_mode: body.input_mode || 'topic',
+        topic: body.topic || '',
+        requirements: body.requirements || '',
         script_text: body.script_text || '',
         output_language: body.output_language || 'zh',
         generate_draft: body.generate_draft ?? false,

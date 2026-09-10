@@ -5,11 +5,11 @@ import { useProjectStore } from '../../store/projectStore';
 
 const TASK_LABELS = [
   '准备输入源',
-  '本地 ASR 转写',
+  '阿里云语音处理',
   '整理场景分段',
-  '分析讲述结构',
-  '规划视觉方向',
-  '生成视频方案',
+  '分析科学叙事',
+  '规划语义动画',
+  '生成科普方案',
 ];
 
 const PLAN_SUBSTEPS = [
@@ -54,7 +54,7 @@ export default function AnalysisProgressPanel() {
         <div className="relative z-10 flex flex-col items-center gap-6">
           <div className="flex items-center gap-3">
             <div className="w-3 h-3 rounded-full bg-primary animate-dot-pulse" />
-            <span className="text-lg font-bold text-text-main">正在理解你的输入内容</span>
+            <span className="text-lg font-bold text-text-main">正在构建科学解释路径</span>
           </div>
           <div className="relative w-36 h-36">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">

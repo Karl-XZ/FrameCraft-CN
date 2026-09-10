@@ -1,5 +1,7 @@
 # 视频内容分类与动效规则
 
+> 历史文档：本文保留旧版口播分类，不参与当前一键科普视频 Agent 的决策。当前规范见 [一键科普视频生成工作流](SCIENCE_VIDEO_WORKFLOW.md)。
+
 本文档定义 FrameCraft Agent 流程中的基础内容分类。Agent 在 `content_category=auto` 时会结合 `target_style`、素材备注、ASR 文本自动判断。
 
 ## 1. 搞笑整活 `funny_reaction`

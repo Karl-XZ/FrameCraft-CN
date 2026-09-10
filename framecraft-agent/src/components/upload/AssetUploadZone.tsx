@@ -32,12 +32,12 @@ export default function AssetUploadZone() {
         type="file"
         multiple
         className="hidden"
-        accept="video/*,image/*,audio/*"
+        accept="video/*,audio/*"
         onChange={(e) => void handleFiles(e.target.files)}
       />
       {isDragging && (
         <div className="absolute inset-0 rounded-lg bg-primary/10 flex items-center justify-center pointer-events-none z-10">
-          <span className="text-primary-light font-semibold text-sm">松开上传素材</span>
+          <span className="text-primary-light font-semibold text-sm">松开上传视频或音频</span>
         </div>
       )}
 
@@ -49,10 +49,10 @@ export default function AssetUploadZone() {
         </div>
         <div className="text-center">
           <p className="text-sm text-text-secondary font-medium">
-            拖拽音频、图片或参考素材到这里
+            拖拽视频或音频到这里
           </p>
           <p className="text-xs text-text-muted mt-1">
-            推荐至少上传一条解说音频；没有音频也可以在下方讲稿区直接写文字
+            视频将只提取原音轨；随后由阿里云 ASR 生成逐字稿
           </p>
         </div>
         <button

@@ -39,3 +39,5 @@ manual_codex_videos/**/*.jpg
 manual_codex_videos/**/*.png
 manual_codex_videos/**/*.log
 benchmark-results/*.mp4
+benchmark-results/*.jpg
+benchmark-results/*.png

@@ -94,10 +94,13 @@ class ProjectIn(BaseModel):
     name: str
     aspect_ratio: str = "9:16"
     target_duration: int = 60
-    target_style: str = "faceless_explainer"
+    target_style: str = "science_explainer"
     output_language: str = "zh"
     generate_draft: bool = False
     keep_hyperframes: bool = True
+    input_mode: str = "topic"
+    topic: str = ""
+    requirements: str = ""
     script_text: str = ""
 
 
@@ -138,6 +141,12 @@ def health():
 
 @app.post("/api/projects")
 def create_project(body: ProjectIn):
+    if body.input_mode not in {"topic", "script", "media"}:
+        raise HTTPException(400, "输入模式必须是 topic、script 或 media。")
+    if body.input_mode == "topic" and not body.topic.strip():
+        raise HTTPException(400, "主题模式需要填写科普主题。")
+    if body.input_mode == "script" and not body.script_text.strip():
+        raise HTTPException(400, "文案模式需要填写完整科普文案。")
     pid = store.new_id("proj")
     now = store.now_iso()
     project = {
@@ -148,9 +157,12 @@ def create_project(body: ProjectIn):
         "aspect_ratio": body.aspect_ratio,
         "target_style": body.target_style,
         "target_duration": body.target_duration,
-        "output_language": body.output_language,
-        "generate_draft": body.generate_draft,
+        "output_language": "zh",
+        "generate_draft": False,
         "keep_hyperframes": body.keep_hyperframes,
+        "input_mode": body.input_mode,
+        "topic": body.topic.strip(),
+        "requirements": body.requirements.strip(),
         "script_text": body.script_text.strip(),
         "current_version_id": None,
         "created_at": now,
@@ -443,6 +455,15 @@ def version_subtitles(project_id: str, version_id: str):
     return _file_or_json(path, "")
 
 
+@app.get("/api/projects/{project_id}/versions/{version_id}/source-ledger")
+def version_source_ledger(project_id: str, version_id: str):
+    version = _version(project_id, version_id)
+    path = Path(version["version_dir"]) / "SOURCE_LEDGER.md"
+    if path.is_file():
+        return FileResponse(path, media_type="text/markdown; charset=utf-8", filename="SOURCE_LEDGER.md")
+    raise HTTPException(404, "该版本没有外部数据来源台账。")
+
+
 @app.get("/api/projects/{project_id}/versions/{version_id}/hyperframes")
 def version_hyperframes(project_id: str, version_id: str):
     version = _version(project_id, version_id)
@@ -583,6 +604,12 @@ def model_providers():
             "base_url": "https://api.deepseek.com",
             "note": "默认并行模型：deepseek-v4-flash；代码总监：deepseek-v4-pro；视觉验收：deepseek-v4-flash-vision-exp。Key 仅存后端，不回显到前端。",
         },
+        "speech": {
+            "label": "阿里云百炼语音",
+            "asr_model": "qwen3-asr-flash",
+            "tts_model": "qwen3-tts-flash",
+            "note": "主题或文案通过阿里云 TTS 配音；上传视频或音频通过阿里云 ASR 转写。Key 仅存后端。",
+        },
     }
 
 
@@ -603,6 +630,9 @@ def save_settings(body: dict[str, str]):
             "asr_model",
             "tts_model",
             "tts_voice",
+            "dashscope_api_key",
+            "dashscope_base_url",
+            "dashscope_compatible_base_url",
             "api_key",
         }
         for key in allowed:

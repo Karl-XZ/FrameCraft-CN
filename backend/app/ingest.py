@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import re
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from . import store
-from .local_speech import probe_duration_s, synthesize_speech, transcribe_audio_local
+from .aliyun_speech import probe_duration_s, synthesize_speech, transcribe_audio_cloud
+from .science_content import generate_science_brief, write_source_ledger
 
 
 @dataclass
@@ -76,14 +79,57 @@ def prepare_source_bundle(project_id: str) -> PreparedSource:
     source_dir = store.project_dir(project_id) / "input"
     source_dir.mkdir(parents=True, exist_ok=True)
 
-    script_text = read_script_text(project)
-    if script_text:
+    input_mode = str(project.get("input_mode") or ("script" if read_script_text(project) else "media"))
+    if input_mode == "topic":
+        return prepare_topic_source(project_id, project, source_dir)
+    if input_mode == "script":
+        script_text = read_script_text(project)
+        if not script_text:
+            raise RuntimeError("文案模式需要填写完整科普文案。")
         return prepare_script_source(project_id, project, source_dir, script_text)
+    media_asset = choose_media_asset(assets)
+    if not media_asset:
+        raise RuntimeError("媒体模式需要上传一条视频或音频。")
+    return prepare_media_source(project_id, project, source_dir, Path(str(media_asset["path"])).resolve())
 
-    audio_asset = choose_audio_asset(assets)
-    if not audio_asset:
-        raise RuntimeError("请上传一条解说音频，或者先填写讲稿文字。")
-    return prepare_audio_source(project_id, project, source_dir, Path(str(audio_asset["path"])).resolve())
+
+def prepare_topic_source(project_id: str, project: dict[str, Any], source_dir: Path) -> PreparedSource:
+    brief_path = source_dir / "science_brief.json"
+    if brief_path.is_file():
+        brief = json.loads(brief_path.read_text(encoding="utf-8"))
+    else:
+        brief = generate_science_brief(
+            str(project.get("topic") or project.get("name") or ""),
+            str(project.get("requirements") or ""),
+            int(project.get("target_duration") or 60),
+        )
+        brief_path.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_source_ledger(source_dir / "SOURCE_LEDGER.md", brief)
+    source_map = {
+        str(item.get("id") or ""): item
+        for item in brief.get("sources") or []
+        if str(item.get("url") or "").startswith("https://")
+    }
+    segments = [
+        {
+            "title": str(item.get("title") or f"第{idx}章"),
+            "narration": normalize_script_text(str(item.get("narration") or "")),
+            "visual_claim": str(item.get("visual_claim") or ""),
+            "motion": str(item.get("motion") or "mechanism"),
+            "evidence_ids": list(item.get("evidence_ids") or []),
+            "evidence_sources": [source_map[source_id] for source_id in item.get("evidence_ids") or [] if source_id in source_map],
+        }
+        for idx, item in enumerate(brief.get("chapters") or [], start=1)
+        if normalize_script_text(str(item.get("narration") or ""))
+    ]
+    script_text = "".join(item["narration"] for item in segments)
+    write_script_text(project_id, script_text)
+
+    def save_script(data):
+        if project_id in data["projects"]:
+            data["projects"][project_id]["script_text"] = script_text
+    store.mutate(save_script)
+    return _prepare_synthesized_source(project_id, project, source_dir, script_text, segments, "topic")
 
 
 def prepare_script_source(
@@ -92,34 +138,108 @@ def prepare_script_source(
     source_dir: Path,
     script_text: str,
 ) -> PreparedSource:
+    transcript_txt = normalize_script_text(script_text)
+    segments = [
+        {
+            "title": derive_chapter_title(text, idx),
+            "narration": text,
+            "visual_claim": text,
+            "motion": infer_semantic_motion(text, idx),
+            "evidence_ids": [],
+        }
+        for idx, text in enumerate(segment_script_for_tts(transcript_txt), start=1)
+    ]
+    return _prepare_synthesized_source(project_id, project, source_dir, transcript_txt, segments, "script")
+
+
+def _prepare_synthesized_source(
+    project_id: str,
+    project: dict[str, Any],
+    source_dir: Path,
+    script_text: str,
+    segments: list[dict[str, Any]],
+    mode: str,
+) -> PreparedSource:
     script_path = write_script_text(project_id, script_text)
-    source_audio = source_dir / "source_audio.mp3"
-    tts_meta = synthesize_speech(script_text, source_audio)
+    source_audio = source_dir / "source_audio.wav"
     transcript_dir = source_dir / "transcribe"
     transcript_dir.mkdir(parents=True, exist_ok=True)
     transcript_txt = normalize_script_text(script_text)
-    words = make_pseudo_timed_words(transcript_txt, probe_duration_s(source_audio))
+    script_sha256 = hashlib.sha256(transcript_txt.encode("utf-8")).hexdigest()
     transcript_path = transcript_dir / "transcript.json"
+    seed_path = source_dir / "scene_seed.json"
+    meta_path = source_dir / "source_bundle.json"
+    if all(path.is_file() for path in (source_audio, transcript_path, seed_path, meta_path)):
+        cached = json.loads(meta_path.read_text(encoding="utf-8"))
+        if cached.get("script_sha256") == script_sha256 and cached.get("mode") == mode:
+            return PreparedSource(
+                mode=mode,
+                source_dir=source_dir,
+                source_text=transcript_txt,
+                source_audio_path=source_audio,
+                transcript_path=transcript_path,
+                scene_seed_path=seed_path,
+                metadata_path=meta_path,
+            )
+    tts_dir = source_dir / "tts"
+    tts_dir.mkdir(parents=True, exist_ok=True)
+    audio_parts: list[Path] = []
+    tts_segments: list[dict[str, Any]] = []
+    words: list[dict[str, Any]] = []
+    scene_seed_items: list[dict[str, Any]] = []
+    cursor = 0.0
+    for idx, segment in enumerate(segments, start=1):
+        narration = normalize_script_text(str(segment.get("narration") or ""))
+        part = tts_dir / f"scene_{idx:02d}.wav"
+        meta = synthesize_speech(narration, part)
+        duration = probe_duration_s(part)
+        segment_words = make_pseudo_timed_words(narration, duration)
+        for word in segment_words:
+            words.append({**word, "id": f"w{len(words)}", "start": round(word["start"] + cursor, 3), "end": round(word["end"] + cursor, 3)})
+        scene_seed_items.append(
+            {
+                "sceneNumber": idx,
+                "sceneId": f"scene_{idx}",
+                "start_s": round(cursor, 3),
+                "end_s": round(cursor + duration, 3),
+                "duration_s": round(duration, 3),
+                "transcript": narration,
+                "word_count": len(segment_words),
+                "words": words[-len(segment_words):] if segment_words else [],
+                "chapter_title": segment.get("title"),
+                "visual_claim": segment.get("visual_claim"),
+                "motion": segment.get("motion"),
+                "evidence_ids": segment.get("evidence_ids") or [],
+                "evidence_sources": segment.get("evidence_sources") or [],
+            }
+        )
+        audio_parts.append(part)
+        tts_segments.append(meta)
+        cursor += duration
+    concatenate_audio(audio_parts, source_audio)
     transcript_path.write_text(json.dumps(words, ensure_ascii=False, indent=2), encoding="utf-8")
     (transcript_dir / "transcript.txt").write_text(transcript_txt + "\n", encoding="utf-8")
-    words = json.loads(transcript_path.read_text(encoding="utf-8"))
-    scene_seed = build_audio_scene_seed(words)
-    seed_path = source_dir / "scene_seed.json"
+    scene_seed = {
+        "mode": mode,
+        "total_duration_s": round(probe_duration_s(source_audio), 3),
+        "scene_count": len(scene_seed_items),
+        "scenes": scene_seed_items,
+    }
     seed_path.write_text(json.dumps(scene_seed, ensure_ascii=False, indent=2), encoding="utf-8")
     (source_dir / "transcript.txt").write_text(transcript_txt + "\n", encoding="utf-8")
     meta = {
-        "mode": "script",
+        "mode": mode,
         "script_path": str(script_path),
         "source_audio_path": str(source_audio),
         "transcript_path": str(transcript_path),
         "scene_seed_path": str(seed_path),
         "target_duration": float(scene_seed.get("total_duration_s") or 0),
-        "tts": tts_meta,
+        "script_sha256": script_sha256,
+        "tts": {"provider": "aliyun-bailian", "segments": tts_segments},
     }
-    meta_path = source_dir / "source_bundle.json"
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return PreparedSource(
-        mode="script",
+        mode=mode,
         source_dir=source_dir,
         source_text=transcript_txt or script_text,
         source_audio_path=source_audio,
@@ -129,15 +249,28 @@ def prepare_script_source(
     )
 
 
-def prepare_audio_source(
+def prepare_media_source(
     project_id: str,
     project: dict[str, Any],
     source_dir: Path,
-    source_audio: Path,
+    source_media: Path,
 ) -> PreparedSource:
-    audio_copy = source_dir / f"source_audio{source_audio.suffix.lower() or '.mp3'}"
-    if not audio_copy.exists() or audio_copy.stat().st_mtime < source_audio.stat().st_mtime:
-        shutil.copy2(source_audio, audio_copy)
+    if is_video_file(source_media):
+        audio_copy = source_dir / "source_audio.wav"
+        extracted = subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(source_media), "-vn", "-ac", "1", "-ar", "24000", str(audio_copy)],
+            capture_output=True,
+            text=True,
+            timeout=240,
+        )
+        if extracted.returncode != 0:
+            raise RuntimeError(f"上传视频没有可用音轨：{(extracted.stderr or '').strip()[-600:]}")
+        media_kind = "video"
+    else:
+        audio_copy = source_dir / f"source_audio{source_media.suffix.lower() or '.mp3'}"
+        if not audio_copy.exists() or audio_copy.stat().st_mtime < source_media.stat().st_mtime:
+            shutil.copy2(source_media, audio_copy)
+        media_kind = "audio"
     transcript_path, transcript_txt = transcribe_audio(
         audio_copy,
         source_dir / "transcribe",
@@ -149,7 +282,9 @@ def prepare_audio_source(
     seed_path.write_text(json.dumps(scene_seed, ensure_ascii=False, indent=2), encoding="utf-8")
     (source_dir / "transcript.txt").write_text(transcript_txt + "\n", encoding="utf-8")
     meta = {
-        "mode": "audio",
+        "mode": "media",
+        "media_kind": media_kind,
+        "original_media_path": str(source_media),
         "source_audio_path": str(audio_copy),
         "transcript_path": str(transcript_path),
         "scene_seed_path": str(seed_path),
@@ -158,7 +293,7 @@ def prepare_audio_source(
     meta_path = source_dir / "source_bundle.json"
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return PreparedSource(
-        mode="audio",
+        mode="media",
         source_dir=source_dir,
         source_text=transcript_txt,
         source_audio_path=audio_copy,
@@ -168,11 +303,11 @@ def prepare_audio_source(
     )
 
 
-def choose_audio_asset(assets: list[dict[str, Any]]) -> dict[str, Any] | None:
-    audio_assets = [a for a in assets if a.get("file_type") == "audio"]
-    if audio_assets:
-        audio_assets.sort(key=lambda a: a.get("created_at") or "", reverse=True)
-        return audio_assets[0]
+def choose_media_asset(assets: list[dict[str, Any]]) -> dict[str, Any] | None:
+    media_assets = [a for a in assets if a.get("file_type") in {"audio", "video"}]
+    if media_assets:
+        media_assets.sort(key=lambda a: a.get("created_at") or "", reverse=True)
+        return media_assets[0]
     return None
 
 
@@ -187,21 +322,21 @@ def transcribe_audio(audio_path: Path, out_dir: Path, output_language: str) -> t
     ):
         return transcript_path, transcript_text_path.read_text(encoding="utf-8").strip()
 
-    asr = transcribe_audio_local(audio_path, out_dir, output_language if output_language in {"zh", "en", "ja", "ko"} else "zh")
+    asr = transcribe_audio_cloud(audio_path, out_dir, output_language if output_language in {"zh", "en", "ja", "ko"} else "zh")
     transcript_txt = normalize_script_text(str(asr.get("text") or ""))
     if not transcript_txt:
-        raise RuntimeError("本地 ASR 逐字稿为空，无法生成解说视频。")
+        raise RuntimeError("阿里云 ASR 逐字稿为空，无法生成科普视频。")
     total_duration = probe_duration_s(audio_path)
     words = asr.get("words") or make_pseudo_timed_words(transcript_txt, total_duration)
     if not words:
-        raise RuntimeError("本地 ASR 没有生成可用时间轴。")
+        raise RuntimeError("阿里云 ASR 没有生成可用时间轴。")
     transcript_path.write_text(json.dumps(words, ensure_ascii=False, indent=2), encoding="utf-8")
     transcript_text_path.write_text(transcript_txt + "\n", encoding="utf-8")
     raw_path = out_dir / "transcript_source.json"
     raw_path.write_text(
         json.dumps(
             {
-                "provider": asr.get("provider") or "whisper.cpp",
+                "provider": asr.get("provider") or "aliyun-bailian",
                 "text": transcript_txt,
                 "duration_s": round(total_duration, 3),
                 "word_count": len(words),
@@ -215,6 +350,52 @@ def transcribe_audio(audio_path: Path, out_dir: Path, output_language: str) -> t
     return transcript_path, transcript_txt
 
 
+def segment_script_for_tts(text: str, target_chars: int = 55) -> list[str]:
+    sentences = split_sentences(text)
+    if not sentences:
+        return [text]
+    segments: list[str] = []
+    current = ""
+    for sentence in sentences:
+        if current and len(current) + len(sentence) > target_chars:
+            segments.append(current)
+            current = ""
+        if len(sentence) > 580:
+            for offset in range(0, len(sentence), 520):
+                chunk = sentence[offset:offset + 520]
+                if current:
+                    segments.append(current)
+                    current = ""
+                segments.append(chunk)
+            continue
+        current += sentence
+    if current:
+        segments.append(current)
+    return [segment for segment in segments if segment.strip()]
+
+
+def concatenate_audio(parts: list[Path], output: Path) -> None:
+    if not parts:
+        raise RuntimeError("阿里云 TTS 没有生成任何旁白片段。")
+    if len(parts) == 1:
+        shutil.copy2(parts[0], output)
+        return
+    list_path = output.parent / "tts_concat.txt"
+    list_path.write_text("".join(f"file '{part.as_posix()}'\n" for part in parts), encoding="utf-8")
+    proc = subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(list_path), "-c:a", "pcm_s16le", str(output)],
+        capture_output=True,
+        text=True,
+        timeout=240,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"合并阿里云 TTS 旁白失败：{(proc.stderr or '').strip()[-600:]}")
+
+
+def is_video_file(path: Path) -> bool:
+    return path.suffix.lower() in {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".mpeg", ".mpg"}
+
+
 def build_audio_scene_seed(words: list[dict[str, Any]]) -> dict[str, Any]:
     normalized = normalize_words(words)
     if not normalized:
@@ -222,17 +403,13 @@ def build_audio_scene_seed(words: list[dict[str, Any]]) -> dict[str, Any]:
     scenes: list[dict[str, Any]] = []
     current: list[dict[str, Any]] = []
     min_duration = 4.0
-    max_duration = 9.5
-    hard_cap = 12.0
+    hard_cap = 8.5
     for word in normalized:
-        if not current:
-            current.append(word)
-            continue
+        gap = word["start"] - current[-1]["end"] if current else 0.0
         current.append(word)
         duration = current[-1]["end"] - current[0]["start"]
-        gap = word["start"] - current[-2]["end"]
         boundary = (
-            duration >= max_duration and ends_sentence(current[-1]["text"])
+            duration >= min_duration and ends_scene_sentence(current[-1]["text"])
         ) or duration >= hard_cap or (gap >= 0.55 and duration >= min_duration)
         if boundary:
             scenes.append(make_audio_scene(len(scenes) + 1, current))
@@ -254,15 +431,19 @@ def build_audio_scene_seed(words: list[dict[str, Any]]) -> dict[str, Any]:
 def make_audio_scene(scene_number: int, words: list[dict[str, Any]]) -> dict[str, Any]:
     start = words[0]["start"]
     end = words[-1]["end"]
+    transcript = join_words(words)
     return {
         "sceneNumber": scene_number,
         "sceneId": f"scene_{scene_number}",
         "start_s": round(start, 3),
         "end_s": round(end, 3),
         "duration_s": round(end - start, 3),
-        "transcript": join_words(words),
+        "transcript": transcript,
         "word_count": len(words),
         "words": words,
+        "chapter_title": derive_chapter_title(transcript, scene_number),
+        "visual_claim": transcript,
+        "motion": infer_semantic_motion(transcript, scene_number),
     }
 
 
@@ -272,8 +453,31 @@ def merge_audio_scene(scene: dict[str, Any], words: list[dict[str, Any]]) -> dic
     scene["duration_s"] = round(scene["end_s"] - scene["start_s"], 3)
     scene["word_count"] = len(merged_words)
     scene["transcript"] = join_words(merged_words)
+    scene["visual_claim"] = scene["transcript"]
+    scene["motion"] = infer_semantic_motion(scene["transcript"], int(scene.get("sceneNumber") or 1))
     scene["words"] = merged_words
     return scene
+
+
+def derive_chapter_title(text: str, index: int) -> str:
+    clean = normalize_script_text(text)
+    first = re.split(r"[，。！？；：]", clean, maxsplit=1)[0].strip()
+    return (first[:18] or f"知识点 {index}").strip()
+
+
+def infer_semantic_motion(text: str, index: int) -> str:
+    clean = normalize_script_text(text)
+    if "与此同时" in clean:
+        return "system"
+    if re.search(r"起初|后来|过去|未来|阶段|时期|演化|历史|周期", clean):
+        return "timeline"
+    if re.search(r"首先|随后|然后|接着|最终|过程|形成|导致|经过|进入|传递|带入|流入|溶解|留下|补充|积累", clean):
+        return "mechanism"
+    if re.search(r"相比|区别|相反|更[高低大小多强弱快慢]|一方面|另一方面|而|却", clean):
+        return "comparison"
+    if re.search(r"倍|比例|范围|尺度|距离|温度|速度|质量|数量|百分|\d", clean):
+        return "scale"
+    return ["system", "mechanism", "comparison", "scale", "timeline"][(index - 1) % 5]
 
 
 def build_subtitle_cues(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -294,7 +498,7 @@ def build_subtitle_cues(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
         gap = word["start"] - current[-1]["end"]
         next_text = join_words(current + [word])
         should_break = (
-            ends_sentence(current[-1]["text"])
+            ends_caption_sentence(current[-1]["text"])
             or len(next_text) > max_chars
             or duration >= max_duration
             or gap >= max_gap
@@ -306,7 +510,23 @@ def build_subtitle_cues(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
             current.append(word)
     if current:
         cues.append(_make_subtitle_cue(len(cues) + 1, current))
-    return cues
+    return merge_short_subtitle_cues(cues)
+
+
+def merge_short_subtitle_cues(cues: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    for cue in cues:
+        duration = float(cue["end"]) - float(cue["start"])
+        text = str(cue["text"])
+        if merged and (duration < 0.7 or len(text.strip()) <= 2):
+            previous = merged[-1]
+            previous["end"] = cue["end"]
+            previous["text"] = join_words([{"text": previous["text"]}, {"text": text}])
+            continue
+        merged.append(dict(cue))
+    for index, cue in enumerate(merged, start=1):
+        cue["index"] = index
+    return merged
 
 
 def _make_subtitle_cue(index: int, words: list[dict[str, Any]]) -> dict[str, Any]:
@@ -439,6 +659,14 @@ def split_sentences(text: str) -> list[str]:
 
 def ends_sentence(text: str) -> bool:
     return bool(re.search(r"[。！？!?；;，,：:]$", text))
+
+
+def ends_scene_sentence(text: str) -> bool:
+    return bool(re.search(r"[。！？!?；;]$", text))
+
+
+def ends_caption_sentence(text: str) -> bool:
+    return bool(re.search(r"[。！？!?；;]$", text))
 
 
 def join_words(words: list[dict[str, Any]]) -> str:

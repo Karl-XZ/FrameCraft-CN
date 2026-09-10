@@ -1,5 +1,7 @@
 # 版式变体与安全区
 
+> 历史文档：本文保留旧版人物口播布局说明。当前产品不处理人物口播，科普动态图形规范见 [一键科普视频生成工作流](SCIENCE_VIDEO_WORKFLOW.md)。
+
 FrameCraft 现支持以下人物版式。`aspect_ratio` 决定画幅，`layout_variant` 决定人物是否全屏与落位。
 
 ## 当前可用版式

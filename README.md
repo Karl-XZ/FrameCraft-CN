@@ -1,19 +1,21 @@
-# FrameCraft-CN openJiuwen 多 Agent 版
+# FrameCraft-CN 一键科普视频版
 
-FrameCraft-CN 将解说音频或中文讲稿转换为可预览、可下载、可继续对话修改的无人物解说视频。当前后端基于华为开源的 openJiuwen Agent Core 编排多个 DeepSeek Agent，默认把生成的 HyperFrames 工程交给用户电脑真实渲染 MP4，云服务器不再承担 Chromium 渲染负载。
+FrameCraft-CN 把一个科普主题、一篇中文文案或一段音视频，转换为带旁白、简体中文字幕和科学动态图解的 HyperFrames 视频工程。服务端使用华为 openJiuwen 编排 DeepSeek 多 Agent，阿里云百炼提供 TTS 与 ASR，最终 MP4 默认在用户电脑真实渲染并下载。
 
-本版本不处理人物口播，不生成剪映草稿，不提供 FFmpeg 拼接兜底。只要 Agent、HyperFrames 或视觉验收未通过，任务就会明确停止，不注册伪成功版本。
+项目不处理人物口播，不生成剪映草稿，也不提供 FFmpeg 静态拼接兜底。HyperFrames、媒体检查或视觉验收没有通过时，系统会保留真实失败原因，不注册伪成功版本。
 
 ## 功能
 
-- 上传音频：本地 Whisper 生成简体中文逐字稿与词级时间戳。
-- 输入讲稿：先使用 Edge TTS 生成中文旁白，再按原稿生成精确字幕与场景种子。
-- 多 Agent 设计：内容、视觉、时序三个专家并行工作，代码总监统一生成每个项目的创意规格。
-- 动态视频：根据内容选择流程、数据、知识关系、故事时间线等场景，不复用上一项目的固定文案。
-- 本地真实渲染：用户电脑上的 FrameCraft Renderer 调用 HyperFrames `--strict` 输出 1080p、24fps、H.264/AAC MP4。
-- 双重验收：先用 `ffprobe` 检查音视频流与完整时长，再由 DeepSeek 视觉模型检查全片联系表。
-- 项目隔离：每个项目拥有独立素材、聊天、分析、Agent 追踪与版本目录。
-- 自动清理：生产环境默认只保留 24 小时，活动任务不会被中途删除。
+- 输入主题：DeepSeek 自动生成科普讲稿、章节、视觉主张和来源台账，再调用阿里云 TTS。
+- 输入文案：严格按照用户原文生成阿里云 TTS、字幕和视频，不改写正文。
+- 上传媒体：阿里云 ASR 转写音频或视频原音轨；最终成片完整使用原音频，不重新配音。
+- 多 Agent 设计：内容、视觉、时序专家并行工作，代码总监生成当前项目的唯一创意规格。
+- 科学语义动画：机制、尺度、对比、时间线和系统关系使用不同空间结构与持续动画。
+- 真实 HyperFrames：本地 Renderer 调用 HyperFrames `--strict` 渲染 H.264/AAC MP4。
+- 双重验收：本地 `ffprobe` 检查流和完整时长，DeepSeek 视觉模型检查八帧联系表。
+- 项目隔离：每个项目拥有独立素材、聊天、Agent 跟踪、工程和版本记录。
+- 工程留云端：服务器保存可复渲染工程，MP4 只在用户电脑生成和下载。
+- 自动清理：生产环境默认清理超过 24 小时且没有活动任务的项目资源。
 
 ## 演示
 
@@ -23,48 +25,59 @@ FrameCraft-CN 将解说音频或中文讲稿转换为可预览、可下载、可
 
 ![FrameCraft-CN 成片示意](docs/assets/readme/final-video-sample.png)
 
+## 三种输入模式
+
+| 模式 | 用户输入 | 内容边界 | 声音来源 |
+| --- | --- | --- | --- |
+| 主题 | 主题、受众、额外要求 | DeepSeek 生成讲稿并核验来源链接 | 阿里云 Qwen3 TTS |
+| 文案 | 完整演讲稿 | 保持原文字序和内容，只按标点分段 | 阿里云 Qwen3 TTS |
+| 媒体 | 音频或含音轨的视频 | 阿里云 ASR 转写，视觉严格跟随原音频 | 用户原音频 |
+
+完整规范见 [一键科普视频生成工作流](docs/SCIENCE_VIDEO_WORKFLOW.md)。
+
 ## 架构
 
 ```text
-React 工作台
-  -> FastAPI 项目与任务 API
-  -> 音频预处理 / 本地 Whisper ASR
+React 网页工作台
+  -> FastAPI 项目、素材、任务和聊天 API
+  -> 主题：DeepSeek 讲稿与来源 / 文案：原文 / 媒体：阿里云 ASR
+  -> 文本输入使用阿里云 Qwen3 TTS
   -> openJiuwen TeamRuntime
-       -> narrative: 内容结构
-       -> visual: 视觉隐喻与场景形式
-       -> timing: 节奏与可读性
-       -> code_director: DeepSeek V4 Pro 汇总创意规格
-  -> 云端生成 HyperFrames HTML 工程包
-  -> 浏览器传给用户电脑的 FrameCraft Renderer
-  -> 用户电脑 HyperFrames --strict 真实渲染与 ffprobe 检查
-  -> 用户电脑生成联系表并上传临时验收图
-  -> 云端 DeepSeek V4 Flash Vision 验收后立即删除联系表
-  -> MP4 在用户电脑预览和下载，服务器只保存工程
+       -> narrative：科学叙事与信息层级
+       -> visual：视觉隐喻与语义运动
+       -> timing：节奏、字幕和同屏密度
+       -> code_director：DeepSeek Pro 汇总创意规格
+  -> 生成 HyperFrames HTML、时间线、字幕和来源台账
+  -> 浏览器把工程包交给用户电脑的 FrameCraft Renderer
+  -> HyperFrames --strict 真实渲染
+  -> ffprobe 完整性检查 + 临时联系表视觉验收
+  -> MP4 在当前电脑预览和下载，服务器只保存工程
 ```
 
-三个专家由 openJiuwen `TeamRuntime` 并行调度，代码总监在专家完成后汇总。每次项目分析都会真实调用模型，追踪信息写入 `outputs/<project_id>/analysis/agent_trace.json`。该文件包含框架名、团队拓扑、各 Agent 模型、耗时和原始结构化结果，可确认任务确实经过 openJiuwen 与 DeepSeek。
+`outputs/<project_id>/analysis/agent_trace.json` 保存 openJiuwen 团队拓扑、模型、耗时和结构化结果，用于确认每次任务真实经过多 Agent。
 
 ## 模型分工
 
-| 职责 | 默认模型 |
+| 职责 | 默认模型或服务 |
 | --- | --- |
 | 内容、视觉、时序专家 | `deepseek-v4-flash` |
-| 代码总监 | `deepseek-v4-pro` |
+| 科普写稿、代码总监 | `deepseek-v4-pro` |
 | 成片视觉验收 | `deepseek-v4-flash-vision-exp` |
-
-默认 OpenAI 兼容地址为 `https://api.deepseek.com`。密钥只通过环境变量或受保护的后端设置提供，不应写入仓库、前端源码、日志或 README。
+| 文本转语音 | 阿里云百炼 `qwen3-tts-flash` |
+| 语音转文字 | 阿里云百炼 `qwen3-asr-flash` |
 
 ## 环境要求
 
 - Python 3.11
 - Node.js 22 或更高版本
 - npm
-- ffmpeg 与 ffprobe
+- `ffmpeg` 与 `ffprobe`
 - Chromium 或 Chrome
-- 可用的 DeepSeek API Key
-- HyperFrames CLI，项目当前锁定 `0.7.41`
+- DeepSeek API Key
+- 阿里云百炼 DashScope API Key
+- HyperFrames CLI，当前锁定 `0.7.41`
 
-Ubuntu 依赖示例：
+Ubuntu 示例：
 
 ```bash
 sudo apt-get update
@@ -77,26 +90,24 @@ sudo apt-get install -y python3.11 python3.11-venv ffmpeg curl fonts-noto-cjk
 git clone https://github.com/Karl-XZ/FrameCraft-CN.git
 cd FrameCraft-CN
 ./scripts/setup-deps.sh
-```
-
-安装脚本会创建独立的 `backend/venv-openjiuwen`，安装 `openjiuwen==0.1.17.post1`、FastAPI、OpenAI SDK、前端依赖与 HyperFrames。
-
-检查环境：
-
-```bash
 ./scripts/verify-env.sh
 ```
 
 ## 配置
 
-推荐使用环境变量：
-
 ```bash
-export DEEPSEEK_API_KEY='your-key'
+export DEEPSEEK_API_KEY='your-deepseek-key'
 export DEEPSEEK_BASE_URL='https://api.deepseek.com'
+
+export DASHSCOPE_API_KEY='your-dashscope-key'
+export DASHSCOPE_BASE_URL='https://dashscope.aliyuncs.com/api/v1'
+export DASHSCOPE_COMPATIBLE_BASE_URL='https://dashscope.aliyuncs.com/compatible-mode/v1'
+export DASHSCOPE_TTS_MODEL='qwen3-tts-flash'
+export DASHSCOPE_TTS_VOICE='Cherry'
+export DASHSCOPE_ASR_MODEL='qwen3-asr-flash'
 ```
 
-不要把真实密钥写入 `.env.example`、Docker 镜像、Git 提交或浏览器构建产物。前端模型设置不会回显已保存的密钥。
+不要把真实密钥写入 Git、README、前端源码、浏览器构建产物或日志。后端设置接口不会向前端回显已保存的密钥。
 
 可选运行参数：
 
@@ -115,128 +126,97 @@ export FRAMECRAFT_RENDER_TARGET=local
 ./scripts/start-frontend.sh
 ```
 
-每台需要渲染的用户电脑还要启动本地 Renderer：
+每台负责渲染的用户电脑还要启动本地 Renderer：
 
 ```bash
 npm install
 npm run local-renderer
 ```
 
-macOS/Linux 也可以运行 `./scripts/start-local-renderer.sh`，Windows 可以双击 `scripts/start-local-renderer.cmd`。本地服务只监听 `127.0.0.1:19186`，不接收 DeepSeek Key 或服务器访问口令。公网工作台必须使用 HTTPS；首次点击生成时，Chrome 会询问是否允许该网站访问本地网络，请选择“允许”。如果曾经拒绝，可点击地址栏左侧的站点图标，在网站设置中重新允许本地网络访问。
+macOS/Linux 可运行 `./scripts/start-local-renderer.sh`，Windows 可运行 `scripts/start-local-renderer.cmd`。Renderer 只监听 `127.0.0.1:19186`，不接收 DeepSeek、DashScope Key 或服务器访问口令。公网工作台必须使用 HTTPS，浏览器首次访问回环服务时需要允许“本地网络访问”。
 
-Renderer 只接受明确列入来源白名单的网页。部署正式域名后设置：
+正式域名建议配置来源白名单：
 
 ```bash
 export FRAMECRAFT_LOCAL_RENDERER_ORIGINS='https://your-framecraft.example.com'
 export FRAMECRAFT_LOCAL_RENDERER_CRF=30
 ```
 
-健康检查：
+除健康检查外，API 默认需要访问口令。首次启动会生成权限为 `0600` 的 `backend/storage/access_token.txt`。浏览器通过一次性 URL 查询参数写入本地存储后会移除地址栏中的口令。
 
-```bash
-curl http://127.0.0.1:8022/api/health
-```
+## 网页流程
 
-预期响应：
-
-```json
-{"ok":true,"mode":"openjiuwen-multi-agent"}
-```
-
-除健康检查外，API 默认要求访问口令。首次启动会生成 `backend/storage/access_token.txt`，文件权限设置为仅当前用户可读写。浏览器首次打开时可通过 `?access_token=<token>` 写入当前浏览器本地存储，之后 URL 中的口令会自动移除。
-
-## 生成流程
-
-1. 在网页新建项目并选择 16:9 或 9:16。
-2. 上传一条解说音频，或直接输入中文讲稿。
-3. 点击开始分析，等待 openJiuwen 团队完成内容、视觉、时序和代码设计。
-4. 查看方案后点击生成。
-5. 网页连接用户电脑上的 Renderer，执行 HyperFrames 严格渲染与本地 `ffprobe` 检查。
-6. Renderer 在本机生成联系表，网页只上传这张临时验收图；云端视觉 Agent 验收后立即删除它。
-7. MP4 直接从本机 Renderer 进入当前浏览器预览和下载，不上传服务器。
-8. 在项目聊天中提出修改要求，Agent 会在当前项目上下文内生成新版本。
+1. 新建项目，选择主题、文案或媒体模式。
+2. 设置画幅、目标时长和科学视觉风格；媒体模式进入工作台后上传文件。
+3. 点击“开始生成科普方案”，等待内容准备和 openJiuwen 多 Agent 分析。
+4. 查看方案并确认生成。
+5. 网页连接本地 Renderer，下载工程并执行 HyperFrames 严格渲染。
+6. 本机检查音视频流与完整时长，并生成临时八帧联系表。
+7. 云端视觉 Agent 验收后删除联系表；通过时 MP4 直接进入当前浏览器预览和下载。
+8. 在项目聊天中继续提出修改，当前项目 Agent 基于同一上下文生成新版本。
 
 ## 质量门槛
 
-- 音频必须完整保留，成片时长与输入时长误差受控。
-- 字幕来自逐字稿，使用简体中文，固定在底部安全区居中显示。
-- 观众画面不得出现“场景、制作、动画、工作流、Agent”等幕后文案。
-- 不允许伪造数据；原稿没有数值时使用定性信息图。
-- 流程类画面逐节点出现，不把整张流程图当作一页 PPT 一次展示。
-- 圆角、半透明、布局密度和动画节奏必须通过全片抽帧检查。
-- HyperFrames 以 `--strict` 运行，lint 硬错误会直接阻止版本注册。
-- 视觉评分低于 75 或视觉模型判断失败时，任务不会注册版本。
+- 文案模式字幕必须覆盖原文，媒体模式必须保留原音频完整时长。
+- 字幕使用简体中文，固定居中放在底部安全区，并带渐入渐出。
+- 观众画面禁止出现幕后制作文案。
+- 精确数据必须可追溯；没有数字时只用定性图解，不伪造刻度。
+- 机制、尺度、对比、时间线和系统关系使用不同主视觉结构。
+- 关键节点逐个出现，并具有表达含义的持续运动。
+- 主视觉充分利用画幅，避免拥挤、遮挡与无意义空白。
+- HyperFrames 必须以 `--strict` 运行；视觉评分低于 75 时不登记通过版本。
 
-## 五分钟基准
-
-仓库提供真实 60 秒音频基准脚本。它会为每一轮重新创建项目、上传、ASR、调用四个 DeepSeek Agent、生成 HTML、严格渲染、视觉验收和 `ffprobe` 检查，不复用上一轮创意结果。
+## 测试
 
 ```bash
-backend/venv-openjiuwen/bin/python scripts/benchmark_openjiuwen_60s.py \
-  /absolute/path/to/real-60s.wav --api http://127.0.0.1:8022 --runs 3
+backend/venv-openjiuwen/bin/python -m unittest discover -s backend/tests -v
+cd framecraft-agent && npm run lint && npm run build
 ```
 
-2026-09-10 在 Apple Silicon 8 核机器上的连续三轮实测：
+部署到 `/FrameCraft/` 子路径时使用：
 
-| 轮次 | 画幅 | 分析 | 生成与验收 | 端到端 | 视觉评分 |
-| --- | --- | ---: | ---: | ---: | ---: |
-| 1 | 16:9 | 18.11 秒 | 58.31 秒 | 76.51 秒 | 88 |
-| 2 | 9:16 | 18.11 秒 | 60.34 秒 | 78.54 秒 | 88 |
-| 3 | 16:9 | 18.12 秒 | 56.33 秒 | 74.55 秒 | 88 |
+```bash
+cd framecraft-agent
+FRAMECRAFT_PUBLIC_BASE=/FrameCraft/ npm run build
+```
 
-三轮最大端到端耗时 78.54 秒，平均 76.53 秒。原始结构化结果位于 `benchmark-results/openjiuwen-60s-20260910-005244.json`。本地渲染模式下，云端只负责 ASR、Agent、工程打包和联系表视觉验收；MP4 不经过公网传输。
+真实网页端主题模式：
 
-公网网页纯本地渲染验收中，60 秒音频从上传到本机下载共 167.42 秒；刷新项目后基于已保存工程重新渲染只需 63.26 秒。服务器无 MP4、成片路径和残留联系表，记录见 `benchmark-results/pure-local-server-ui-20260910.json`。
+```bash
+backend/venv-openjiuwen/bin/python scripts/run_science_ui_flow.py \
+  --mode topic \
+  --input '为什么天空通常呈现蓝色，日落时偏红？' \
+  --requirements '面向成年人，约一分钟，避免公式' \
+  --studio 'https://your-framecraft.example.com' \
+  --output benchmark-results/science-topic.mp4
+```
 
-## 本地渲染安全边界
-
-- Renderer 只绑定回环地址，不开放局域网或公网端口。
-- 浏览器下载工程包时使用服务器访问口令；全局口令不会传给 Renderer。
-- MP4 始终保留在用户电脑。服务器只接收一张临时联系表用于视觉验收，接口返回后立即删除图片，只保存验收 JSON。
-- 服务端 API 会忽略任何云端渲染请求，历史预览接口固定返回 `410`，因此不能通过跨设备链接获取 MP4。
-- 后端每次启动都会清理输出目录内的历史 MP4 和联系表，并把仍有 HyperFrames 工程的旧版本迁移为可本地复渲染状态。
-- 刷新或关闭页面后，本机 Blob 预览会失效；用户可随时从服务器保存的同一 HyperFrames 工程重新本地渲染。
-- Renderer 只接收 ZIP 二进制，拒绝目录穿越路径，并在系统临时目录隔离执行。
-- 同一时间只允许一个本地渲染任务，临时工程与 MP4 默认一小时后删除。
-- Renderer 不提供 FFmpeg 合成兜底；HyperFrames 严格渲染失败会原样返回错误。
-- 本机先用 `ffprobe` 检查完整时长和音视频流，再由云端依据临时联系表检查视觉质量；任一项未通过都不会登记为可复渲染版本。
+`--mode script` 时 `--input` 传完整文案；`--mode media` 时传音频或视频绝对路径。测试脚本连接真实 API、本地 Renderer 和真实 HyperFrames，不提供模拟成片。
 
 ## 产物
 
 ```text
 outputs/<project_id>/
-  analysis/
-    analysis.json
-    edit_plan.json
-    creative_plan.json
-    agent_trace.json
-  <version_id>/
-    subtitles.srt
-    timeline.json
-    agent_visual_review.json
-    agent_trace.json
-    local_render_manifest.json
-    hyperframes/
-    hyperframes_project.zip
+  analysis/analysis.json, edit_plan.json, creative_plan.json, agent_trace.json
+  input/scene_seed.json, source_bundle.json, transcript.txt, SOURCE_LEDGER.md
+  <version_id>/subtitles.srt, timeline.json, agent_visual_review.json
+  <version_id>/local_render_manifest.json, hyperframes/, hyperframes_project.zip
 ```
 
-## 自动清理
+## 安全与保留
 
-后端启动时会清理超过保留期且没有活动任务的项目。服务器还可以每小时执行：
-
-```bash
-FRAMECRAFT_RETENTION_HOURS=24 ./scripts/cleanup-expired.sh
-```
-
-只查看待删除内容：
-
-```bash
-./scripts/cleanup-expired.sh --dry-run
-```
+- Renderer 只绑定回环地址，拒绝 ZIP 目录穿越，并在系统临时目录隔离执行。
+- 服务端忽略云端渲染请求；MP4 不上传服务器，历史预览接口返回 `410`。
+- 服务器只接收临时联系表用于验收，接口结束后立即删除图片，只保存验收 JSON。
+- 同一时间只允许一个本地渲染任务，本机临时工程和 MP4 默认一小时后删除。
+- 后端可执行 `FRAMECRAFT_RETENTION_HOURS=24 ./scripts/cleanup-expired.sh` 清理过期项目。
+- 来源 URL 只允许公开 HTTPS 地址，并拒绝内网目标和越界重定向。
 
 ## 参考
 
 - [openJiuwen Agent Core](https://github.com/openJiuwen-ai/agent-core)
 - [openJiuwen 文档](https://docs.openjiuwen.com/)
 - [DeepSeek API 文档](https://api-docs.deepseek.com/)
+- [阿里云百炼 Qwen TTS API](https://help.aliyun.com/zh/model-studio/qwen-tts-api)
+- [阿里云百炼 Qwen ASR API](https://help.aliyun.com/zh/model-studio/qwen-asr-api-reference)
 - [HyperFrames](https://github.com/nateherk/hyperframes)

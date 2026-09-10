@@ -16,11 +16,11 @@ from . import store
 from .ingest import PreparedSource, ensure_version_subtitles, prepare_source_bundle
 from .deepseek_api import create_client, deepseek_available, deepseek_settings
 from .jiuwen_team import run_creative_team, run_visual_review
-from .managed_faceless_builder import build_managed_analysis, materialize_managed_faceless_version
+from .managed_faceless_builder import build_science_video_analysis, materialize_science_video_version
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled", "needs_input"}
 HYPERFRAMES_ROOT = store.ROOT.parent / "hyperframes"
-FACELESS_SKILL_ROOT = HYPERFRAMES_ROOT / "skills" / "faceless-explainer"
+SCIENCE_WORKFLOW_DOC = store.ROOT / "docs" / "SCIENCE_VIDEO_WORKFLOW.md"
 FORBIDDEN_CMD_SNIPPETS = [
     "sudo ",
     "ssh ",
@@ -101,10 +101,13 @@ class SingleAgentRunner:
         workspace = store.RUNTIME / "jobs" / job_id
         workspace.mkdir(parents=True, exist_ok=True)
         project = store.snapshot()["projects"].get(project_id) or {}
-        if str(project.get("script_text") or "").strip():
-            self._set_step(job_id, 5, "正在整理讲稿与场景种子")
+        input_mode = str(project.get("input_mode") or "media")
+        if input_mode == "topic":
+            self._set_step(job_id, 5, "DeepSeek 正在生成科普讲稿与章节")
+        elif input_mode == "script":
+            self._set_step(job_id, 5, "阿里云正在按原文生成科普旁白")
         else:
-            self._set_step(job_id, 5, "正在使用本地 ASR 转写音频")
+            self._set_step(job_id, 5, "阿里云正在转写上传媒体")
         try:
             prepared = prepare_source_bundle(project_id)
         except Exception as exc:
@@ -524,7 +527,7 @@ class SingleAgentRunner:
                 "job_workspace": str(store.RUNTIME / "jobs" / job_id),
                 "app_root": str(store.ROOT),
                 "hyperframes_root": str(HYPERFRAMES_ROOT),
-                "faceless_skill_root": str(FACELESS_SKILL_ROOT),
+                "science_workflow": str(SCIENCE_WORKFLOW_DOC),
                 "audio_materializer": str(store.ROOT / "backend" / "app" / "materialize_audio_from_seed.py"),
             },
         }
@@ -864,6 +867,7 @@ class SingleAgentRunner:
                 "draft_url": None,
                 "timeline_url": f"/api/projects/{pid}/versions/{vid}/timeline",
                 "subtitles_url": f"/api/projects/{pid}/versions/{vid}/subtitles",
+                "source_ledger_url": f"/api/projects/{pid}/versions/{vid}/source-ledger" if (vdir / "SOURCE_LEDGER.md").is_file() else None,
                 "cover_url": None,
                 "publish_copy_url": None,
                 "hyperframes_url": f"/api/projects/{pid}/versions/{vid}/hyperframes" if hyperframes_zip else None,
@@ -912,6 +916,17 @@ class SingleAgentRunner:
             "quality": "standard",
             "expected_duration_s": round(expected_duration, 3),
             "renderer": "hyperframes-strict",
+            "scene_samples": [
+                {
+                    "scene_number": scene.get("scene_number"),
+                    "start_s": scene.get("start_time"),
+                    "end_s": scene.get("end_time"),
+                    "headline": scene.get("headline"),
+                    "semantic_motion": scene.get("semantic_motion"),
+                }
+                for scene in timeline.get("scenes") or []
+                if float(scene.get("end_time") or 0) > float(scene.get("start_time") or 0)
+            ],
         }
         (vdir / "local_render_manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -990,6 +1005,8 @@ class SingleAgentRunner:
                 contact_sheet,
                 {
                     "project": project.get("name"),
+                    "input_mode": project.get("input_mode"),
+                    "requires_source_labels": project.get("input_mode") == "topic",
                     "duration_s": expected_duration,
                     "source_transcript": source_text,
                     "scenes": creative_plan.get("scenes") or [],
@@ -1001,19 +1018,30 @@ class SingleAgentRunner:
                 json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8"
             )
             if not review.get("pass") or float(review.get("score") or 0) < 75:
+                issue_texts = []
+                for issue in review.get("issues") or []:
+                    if isinstance(issue, dict):
+                        issue_texts.append(str(issue.get("desc") or issue.get("detail") or issue.get("message") or json.dumps(issue, ensure_ascii=False)))
+                    else:
+                        issue_texts.append(str(issue))
                 raise RuntimeError(
-                    f"视觉 Agent 验收未通过：{'; '.join(review.get('issues') or [review.get('summary') or '质量不足'])}"
+                    f"视觉 Agent 验收未通过：{'; '.join(issue_texts or [str(review.get('summary') or '质量不足')])}"
                 )
-        except Exception:
+        except Exception as exc:
             def failed_op(data):
                 if version_id in data["versions"]:
                     data["versions"][version_id]["status"] = "local_render_failed"
+                    data["versions"][version_id]["review_error"] = str(exc)
+                if project_id in data["projects"]:
+                    data["projects"][project_id]["status"] = "local_render_failed"
+                    data["projects"][project_id]["updated_at"] = store.now_iso()
             store.mutate(failed_op)
             raise
 
         def op(data):
             current = data["versions"][version_id]
             current["status"] = "local_render_ready"
+            current.pop("review_error", None)
             current["preview_path"] = None
             current["preview_url"] = None
             project_data = data["projects"][project_id]
@@ -1070,7 +1098,7 @@ class SingleAgentRunner:
         assets_dir = version_dir / "assets"
         assets_dir.mkdir(parents=True, exist_ok=True)
         if not prepared.source_audio_path or not prepared.source_audio_path.is_file():
-            raise RuntimeError("缺少可渲染的音频文件，无法生成解说视频。")
+            raise RuntimeError("缺少可渲染的旁白音频，无法生成科普视频。")
         audio_name = "source_audio" + prepared.source_audio_path.suffix.lower()
         shutil.copy2(prepared.source_audio_path, assets_dir / audio_name)
 
@@ -1094,7 +1122,7 @@ class SingleAgentRunner:
             trace_path.write_text(json.dumps(team_result, ensure_ascii=False, indent=2), encoding="utf-8")
 
         self._set_step(job_id, 48, "代码 Agent 正在生成字幕、动画与画面布局")
-        summary = materialize_managed_faceless_version(
+        summary = materialize_science_video_version(
             project=project,
             prepared=prepared,
             version_dir=version_dir,
@@ -1107,6 +1135,9 @@ class SingleAgentRunner:
             trace_path.read_text(encoding="utf-8") if trace_path.is_file() else "{}",
             encoding="utf-8",
         )
+        source_ledger = prepared.source_dir / "SOURCE_LEDGER.md"
+        if source_ledger.is_file():
+            shutil.copy2(source_ledger, version_dir / "SOURCE_LEDGER.md")
         render_fps = int((job.get("payload") or {}).get("fps") or 24)
         render_fps = max(15, min(render_fps, 60))
         if self._render_target(job) == "local":
@@ -1145,8 +1176,10 @@ class SingleAgentRunner:
         sheet = self._extract_contact_sheet(version_dir / "preview.mp4", version_dir / "visual-review.jpg", summary["duration_s"])
         review = run_visual_review(
             sheet,
-            {
-                "project": project.get("name"),
+                {
+                    "project": project.get("name"),
+                    "input_mode": project.get("input_mode"),
+                    "requires_source_labels": project.get("input_mode") == "topic",
                 "duration_s": summary["duration_s"],
                 "source_transcript": prepared.source_text,
                 "scenes": creative_plan.get("scenes") or [],
@@ -1180,7 +1213,7 @@ class SingleAgentRunner:
         project = snapshot["projects"].get(job["project_id"]) or {}
         self._append_log(job_id, "openJiuwen 多 Agent 团队并行分析内容、视觉与时序。", chat=True)
         self._set_step(job_id, 30, "openJiuwen 专家团队正在并行分析")
-        summary = build_managed_analysis(project, prepared)
+        summary = build_science_video_analysis(project, prepared)
         team_result = run_creative_team(str(project.get("id")), self._team_payload(project, prepared))
         analysis_dir = store.project_dir(str(project.get("id"))) / "analysis"
         analysis_dir.mkdir(parents=True, exist_ok=True)
@@ -1217,6 +1250,9 @@ class SingleAgentRunner:
                 "aspect_ratio": project.get("aspect_ratio"),
                 "target_style": project.get("target_style"),
                 "output_language": project.get("output_language"),
+                "input_mode": project.get("input_mode"),
+                "topic": project.get("topic"),
+                "requirements": project.get("requirements"),
             },
             "transcript": prepared.source_text,
             "scenes": [
@@ -1225,6 +1261,11 @@ class SingleAgentRunner:
                     "start": item.get("start_s"),
                     "end": item.get("end_s"),
                     "transcript": item.get("transcript"),
+                    "chapter_title": item.get("chapter_title"),
+                    "visual_claim": item.get("visual_claim"),
+                    "semantic_motion": item.get("motion"),
+                    "evidence_ids": item.get("evidence_ids") or [],
+                    "evidence_sources": item.get("evidence_sources") or [],
                 }
                 for item in seed.get("scenes") or []
             ],
@@ -1320,21 +1361,22 @@ class SingleAgentRunner:
         return f"""
 你是 FrameCraft 单项目视频 Agent。你从头到尾负责当前项目：理解输入、设计 HyperFrames HTML、真实渲染 MP4、验收并与用户沟通。
 
-当前项目是 faceless explainer：只有音频或讲稿，没有人物口播视频。
+当前项目是一键科普视频：画面主体是解释科学概念的动态图形，不使用人物口播画面。
 
 硬性要求：
 1. 只能做真实 HyperFrames 渲染，绝不允许伪装完成，绝不允许 FFmpeg 拼 PPT 或静态图集兜底。
 2. 面向观众的视频里，所有屏幕文字都必须是 {language}。不要出现面向制作的术语、提示词、占位词或工作流文案。
 3. 如果是中文视频，字幕必须固定居中放在底部安全区，不能偏左或偏右。
-4. 画面要像高级解说视频，而不是静态幻灯片：每个关键元素都要有真实出场、退场和自运动；能做流程图、表格、指标卡、关系图、数据动画时不要偷懒做纯文字堆叠。
+4. 画面要像高级科学动态图解：每个关键元素都有出场、退场和语义自运动；优先用机制、尺度、对比、时间线、系统关系解释旁白，不做静态幻灯片或纯文字堆叠。
 5. 卡片、信息块、浮层尽量用圆角和半透明表面，避免生硬纯色底板；布局要有主次、留白和节奏。
 6. 如果任务受阻，必须如实说明，并用 write_chat 告诉用户当前问题；需要用户补充信息时，用 report_progress(status=\"needs_input\") + write_chat。不要假装已经生成。
-7. 你可以读取 HyperFrames 仓库与 faceless-explainer 技能文件作为参考，但当前项目最终要由你自己在项目目录里完成。
+7. 必须读取项目的 `docs/SCIENCE_VIDEO_WORKFLOW.md`，也可以读取 HyperFrames 仓库作为实现参考；当前项目最终要由你自己在项目目录里完成。
 8. 不要直接运行 `hyperframes init`。创建版本目录后，优先调用 `bootstrap_hyperframes_project` 离线生成 `hyperframes/` 子工程，再在其中写 HTML 和真实渲染。
 
 工作边界：
-- 音频模式：必须保留用户上传音频，不允许重配新旁白。
-- 讲稿模式：后端已经生成旁白并按原稿建立逐字时间轴。你必须沿用 prepared_source 里的音频与 scene_seed，不要二次换旁白。
+- 主题模式：DeepSeek 已生成科普讲稿、章节、视觉主张与来源台账；沿用这些内容继续设计。
+- 文案模式：阿里云已经严格按用户原文生成旁白；不得改写正文或二次换旁白。
+- 媒体模式：必须保留上传音频或视频原音轨；阿里云 ASR 只负责转写，不允许重配旁白。
 - 当前工程不导出剪映草稿。
 
 推荐流程：
@@ -1342,7 +1384,7 @@ class SingleAgentRunner:
 - render 任务：创建版本目录 -> bootstrap_hyperframes_project -> 准备 audio_meta / narrator_scripts / captions / scene html 或直接主 index.html -> render_hyperframes_project 真实渲染 -> 写时间线与视觉验收 JSON -> register_version。
 
 工程建议：
-- faceless explainer 可以做成一个强主控的 `hyperframes/index.html`，内部包含多个场景 clip、图表、流程图、字幕轨和音频轨；不必为了形式强拆很多文件。
+- 科普视频可以做成一个强主控的 `hyperframes/index.html`，内部包含多个科学语义场景、字幕轨和音频轨；不必为了形式强拆很多文件。
 - 先确保内容完整和可渲染，再追求更复杂的结构复用。
 - 字体要么使用 HyperFrames 能自动解析的常见 Web 字体，要么显式写 `@font-face` 或 `local()`；如果渲染日志里出现 `font_family_without_font_face` 之类 `✗` 级问题，必须修复后重渲染。
 - 字幕行要控制最大宽度，避免 `caption_text_overflow_risk`。
@@ -1364,9 +1406,9 @@ class SingleAgentRunner:
                     "如有必要先 read_state，然后必须用 write_chat 直接回复用户。\n"
                 )
         mode_note = (
-            "当前是上传音频模式。请使用 prepared_source/scene_seed 保持原音频完整，按 scene_seed 的时间切分场景。"
-            if prepared.mode == "audio"
-            else "当前是讲稿模式。后端已经准备好了旁白、逐字稿与 scene_seed；你需要基于这些输入完成动画设计、字幕与成片。"
+            "当前是上传媒体模式。请保持原音频完整，按 scene_seed 的真实时间切分科学场景。"
+            if prepared.mode == "media"
+            else "当前是主题或文案模式。后端已经用阿里云 TTS 准备旁白并建立时间轴；基于 scene_seed 完成科学动画、字幕与成片。"
         )
         render_note = (
             "当前默认由用户电脑渲染：完成 HyperFrames HTML 工程、字幕和时间线后，必须调用 register_local_render；"
@@ -1389,7 +1431,7 @@ class SingleAgentRunner:
 - scene seed: {prepared.scene_seed_path}
 - project output dir: {store.project_dir(project.get('id'))}
 - HyperFrames repo: {HYPERFRAMES_ROOT}
-- faceless-explainer skill root: {FACELESS_SKILL_ROOT}
+- science workflow: {SCIENCE_WORKFLOW_DOC}
 - uploaded-audio materializer: {store.ROOT / 'backend' / 'app' / 'materialize_audio_from_seed.py'}
 {chat_note}
 如果你在开始阶段还没掌握项目全貌，先调用 read_state。请自己规划工具调用顺序，并持续向用户同步关键进度。

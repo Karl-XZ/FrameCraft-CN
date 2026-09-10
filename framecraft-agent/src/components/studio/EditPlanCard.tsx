@@ -30,7 +30,7 @@ export default function EditPlanCard() {
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-primary-light" />
-            解说视频方案
+            科普视频方案
           </h3>
           <span className="px-3 py-1 rounded-full bg-primary/15 text-primary-light text-xs font-semibold border border-primary/20">
             Agent 方案
@@ -84,7 +84,7 @@ export default function EditPlanCard() {
         <div className="space-y-2">
           <span className="text-xs font-semibold text-accent uppercase tracking-wider flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5" />
-            视觉与素材计划
+            科学图解与证据计划
           </span>
           <div className="space-y-2 max-h-48 overflow-y-auto">
             {(editPlan.broll_plan || []).map((item, i) => (
@@ -97,7 +97,7 @@ export default function EditPlanCard() {
               </div>
             ))}
             {!editPlan.broll_plan?.length && (
-              <p className="text-xs text-text-muted">本次将以动态图形、信息卡和字幕为主，不额外插入图片素材</p>
+              <p className="text-xs text-text-muted">本次将使用机制图、尺度变化、关系图和字幕解释核心概念</p>
             )}
           </div>
         </div>

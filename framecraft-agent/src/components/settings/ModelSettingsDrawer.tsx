@@ -5,7 +5,6 @@ import { api } from '../../api/client';
 
 const RATIOS = ['9:16', '16:9', '1:1'];
 const RESOLUTIONS = ['720p快速预览', '1080p正式导出', '4K旗舰版'];
-const DRAFT_TARGETS = ['不导出草稿'];
 
 type ProviderOption = { id: string; label: string; base_url: string };
 
@@ -22,7 +21,6 @@ export default function ModelSettingsDrawer() {
     videoResolution, setVideoResolution,
     frameRate, setFrameRate,
     targetDuration, setTargetDuration,
-    draftTarget, setDraftTarget,
   } = useProjectStore();
 
   const [providers, setProviders] = useState<ProviderOption[]>([]);
@@ -30,8 +28,12 @@ export default function ModelSettingsDrawer() {
   const [visionModel, setVisionModel] = useState('deepseek-v4-flash-vision-exp');
   const [baseUrl, setBaseUrl] = useState('https://api.deepseek.com');
   const [providerId, setProviderId] = useState('deepseek');
-  const [ttsModel, setTtsModel] = useState('edge-tts');
-  const [ttsVoice, setTtsVoice] = useState('zh-CN-XiaoxiaoNeural');
+  const [ttsModel, setTtsModel] = useState('qwen3-tts-flash');
+  const [ttsVoice, setTtsVoice] = useState('Cherry');
+  const [asrModel, setAsrModel] = useState('qwen3-asr-flash');
+  const [dashscopeKey, setDashscopeKey] = useState('');
+  const [dashscopeBaseUrl, setDashscopeBaseUrl] = useState('https://dashscope.aliyuncs.com/api/v1');
+  const [dashscopeCompatibleBaseUrl, setDashscopeCompatibleBaseUrl] = useState('https://dashscope.aliyuncs.com/compatible-mode/v1');
 
   useEffect(() => {
     if (!showSettingsDrawer) return;
@@ -53,6 +55,9 @@ export default function ModelSettingsDrawer() {
       if (s.vision_model) setVisionModel(s.vision_model);
       if (s.tts_model) setTtsModel(s.tts_model);
       if (s.tts_voice) setTtsVoice(s.tts_voice);
+      if (s.asr_model) setAsrModel(s.asr_model);
+      if (s.dashscope_base_url) setDashscopeBaseUrl(s.dashscope_base_url);
+      if (s.dashscope_compatible_base_url) setDashscopeCompatibleBaseUrl(s.dashscope_compatible_base_url);
       if (s.base_url) setBaseUrl(s.base_url);
       else if (match?.base_url) setBaseUrl(match.base_url);
     });
@@ -77,16 +82,21 @@ export default function ModelSettingsDrawer() {
   };
 
   const save = async () => {
-    await api.saveSettings({
+    const payload: Record<string, string> = {
       provider: providerId,
-      api_key: apiKey,
       text_model: textModel,
       vision_model: visionModel,
-      asr_model: 'whisper-small',
+      asr_model: asrModel,
       tts_model: ttsModel,
       tts_voice: ttsVoice,
+      dashscope_api_key: dashscopeKey,
+      dashscope_base_url: dashscopeBaseUrl,
+      dashscope_compatible_base_url: dashscopeCompatibleBaseUrl,
       base_url: baseUrl,
-    });
+    };
+    if (apiKey.trim()) payload.api_key = apiKey.trim();
+    if (dashscopeKey.trim()) payload.dashscope_api_key = dashscopeKey.trim();
+    await api.saveSettings(payload);
     setShowSettingsDrawer(false);
   };
 
@@ -169,15 +179,24 @@ export default function ModelSettingsDrawer() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <label className="text-xs text-text-muted">TTS 模型</label>
-              <input
-                value={ttsModel}
-                onChange={(e) => setTtsModel(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/8 text-sm text-text-main focus:outline-none focus:border-primary/40"
-              />
+          <div className="space-y-3 rounded-xl border border-secondary/15 bg-secondary/5 p-4">
+            <label className="text-sm font-semibold text-text-main">阿里云百炼语音</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-xs text-text-muted">ASR 模型</label>
+                <input value={asrModel} onChange={(e) => setAsrModel(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/8 text-sm text-text-main" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-text-muted">TTS 模型</label>
+                <input value={ttsModel} onChange={(e) => setTtsModel(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/8 text-sm text-text-main" />
+              </div>
             </div>
+            <input type="password" value={dashscopeKey} onChange={(e) => setDashscopeKey(e.target.value)} placeholder="阿里云百炼 Key（已配置时可留空）" className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/8 text-sm text-text-main" />
+            <input value={dashscopeBaseUrl} onChange={(e) => setDashscopeBaseUrl(e.target.value)} aria-label="DashScope API 地址" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/8 text-xs text-text-main font-mono" />
+            <input value={dashscopeCompatibleBaseUrl} onChange={(e) => setDashscopeCompatibleBaseUrl(e.target.value)} aria-label="DashScope OpenAI 兼容地址" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/8 text-xs text-text-main font-mono" />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
             <div className="space-y-2">
               <label className="text-xs text-text-muted">TTS 音色</label>
               <input
@@ -289,32 +308,6 @@ export default function ModelSettingsDrawer() {
             </div>
           </div>
 
-          <div className="space-y-3">
-            <label className="text-sm font-semibold text-text-main">工程导出策略</label>
-            <div className="space-y-2">
-              {DRAFT_TARGETS.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setDraftTarget(t)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all text-left ${
-                    draftTarget === t
-                      ? 'bg-primary/10 border-primary/25 text-primary-light'
-                      : 'bg-white/4 border-white/8 text-text-secondary hover:border-white/15'
-                  }`}
-                >
-                  <div className={`w-3 h-3 rounded-full border-2 ${
-                    draftTarget === t ? 'border-primary-light bg-primary-light' : 'border-white/20'
-                  }`} />
-                  <div>
-                    <p className="text-sm font-medium">{t}</p>
-                    <p className="text-xs text-text-muted mt-0.5">
-                      当前版本只保留 HyperFrames 源工程和最终 MP4，不同步生成剪映草稿。
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         <div className="px-6 py-4 border-t border-white/8">

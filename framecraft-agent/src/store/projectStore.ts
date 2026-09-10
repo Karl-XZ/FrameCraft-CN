@@ -42,6 +42,9 @@ interface ProjectState {
   frameRate: number;
   targetDuration: number;
   targetStyle: string;
+  inputMode: 'topic' | 'script' | 'media';
+  topic: string;
+  requirements: string;
   outputLanguage: string;
   scriptText: string;
   generateDraft: boolean;
@@ -86,6 +89,9 @@ interface ProjectState {
   setFrameRate: (v: number) => void;
   setTargetDuration: (v: number) => void;
   setTargetStyle: (v: string) => void;
+  setInputMode: (v: 'topic' | 'script' | 'media') => void;
+  setTopic: (v: string) => void;
+  setRequirements: (v: string) => void;
   setOutputLanguage: (v: string) => void;
   setScriptText: (v: string) => void;
   setGenerateDraft: (v: boolean) => void;
@@ -129,7 +135,10 @@ export const useProjectStore = create<ProjectState>((set) => ({
   videoResolution: '1080p正式导出',
   frameRate: 24,
   targetDuration: 60,
-  targetStyle: 'faceless_explainer',
+  targetStyle: 'science_explainer',
+  inputMode: 'topic',
+  topic: '',
+  requirements: '',
   outputLanguage: 'zh',
   scriptText: '',
   generateDraft: false,
@@ -174,6 +183,9 @@ export const useProjectStore = create<ProjectState>((set) => ({
   setFrameRate: (v) => set({ frameRate: v }),
   setTargetDuration: (v) => set({ targetDuration: v }),
   setTargetStyle: (v) => set({ targetStyle: v }),
+  setInputMode: (v) => set({ inputMode: v }),
+  setTopic: (v) => set({ topic: v }),
+  setRequirements: (v) => set({ requirements: v }),
   setOutputLanguage: (v) => set({ outputLanguage: v }),
   setScriptText: (v) => set({ scriptText: v }),
   setGenerateDraft: (v) => set({ generateDraft: v }),
@@ -223,5 +235,8 @@ export const useProjectStore = create<ProjectState>((set) => ({
       planSubstep: null,
       taskText: '准备就绪',
       scriptText: '',
+      inputMode: 'topic',
+      topic: '',
+      requirements: '',
     }),
 }));
