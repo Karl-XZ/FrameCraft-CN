@@ -753,19 +753,25 @@ def render_html_document(
       }}
       .source-line {{
         position: absolute;
-        left: 0;
-        bottom: {170 if height > width else 112}px;
-        max-width: 82%;
-        font-size: {34 if width < 1400 else 30}px;
-        color: rgba(240, 247, 255, 0.88);
+        left: {-58 if height > width else -88}px;
+        bottom: {-188 if height > width else -148}px;
+        width: 42%;
+        max-width: 760px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: {22 if height > width else 20}px;
+        line-height: 1.35;
+        color: rgba(240, 247, 255, 0.82);
         letter-spacing: 0.02em;
-        z-index: 18;
+        text-shadow: 0 2px 10px rgba(0,0,0,.8);
+        z-index: 24;
       }}
       {layout_css}
       .caption-shell {{
         position: absolute;
         left: 50%;
-        bottom: {84 if height > width else 70}px;
+        bottom: {100 if height > width else 84}px;
         transform: translateX(-50%);
         z-index: 20;
         width: min(88%, {780 if height > width else 1160}px);
@@ -900,12 +906,20 @@ def render_html_document(
           }} else if (motif === "cell_network") {{
             tl.to(base + " .pm-cell", {{ x: 28, y: -32, rotation: 8, duration: motionDuration, stagger: 0.12, ease: "sine.inOut" }}, motionStart);
             tl.to(base + " .pm-path", {{ strokeDashoffset: -360, duration: motionDuration, ease: "none" }}, motionStart);
-          }} else if (motif === "orbital_system" || motif === "layered_scale") {{
+          }} else if (motif === "orbital_system") {{
             tl.to(base + " .pm-node", {{ y: -72, scale: 1.16, duration: motionDuration, stagger: 0.16, ease: "sine.inOut" }}, motionStart);
             tl.to(base + " .pm-layer", {{ opacity: 0.42, borderColor: "rgba(255,211,106,.72)", duration: motionDuration, stagger: 0.1, ease: "sine.inOut" }}, motionStart);
-          }} else if (motif === "timeline_curve" || motif === "flow_machine") {{
+          }} else if (motif === "layered_scale") {{
+            tl.to(base + " .pm-node", {{ x: 72, rotation: 240, duration: motionDuration, stagger: 0.18, ease: "sine.inOut" }}, motionStart);
+            tl.to(base + " .pm-boundary-inner", {{ borderColor: "rgba(98,226,189,.9)", boxShadow: "inset 0 0 90px rgba(98,226,189,.2)", duration: motionDuration, ease: "sine.inOut" }}, motionStart);
+          }} else if (motif === "flow_machine") {{
+            tl.to(base + " .pm-path", {{ strokeDashoffset: -520, duration: motionDuration, ease: "none" }}, motionStart);
+            tl.to(base + " .pm-packet", {{ x: 720, opacity: 0.18, duration: motionDuration, stagger: 0.18, ease: "power1.inOut" }}, motionStart);
+            tl.fromTo(base + " .pm-tool", {{ x: 75, opacity: 0.35 }}, {{ x: 0, opacity: 1, duration: motionDuration, stagger: 0.18, ease: "power2.out" }}, motionStart);
+          }} else if (motif === "timeline_curve") {{
             tl.to(base + " .pm-path", {{ strokeDashoffset: -520, duration: motionDuration, ease: "none" }}, motionStart);
             tl.to(base + " .pm-node", {{ y: -58, scale: 1.13, duration: motionDuration, stagger: 0.24, ease: "power1.inOut" }}, motionStart);
+            tl.fromTo(base + " .pm-memory-vault span", {{ y: 44, opacity: 0 }}, {{ y: 0, opacity: 1, duration: motionDuration * 0.72, stagger: 0.28, ease: "power2.out" }}, motionStart + 0.5);
           }} else if (motif === "data_landscape") {{
             tl.fromTo(base + " .pm-data-bar", {{ scaleY: 0.28, transformOrigin: "bottom" }}, {{ scaleY: 1, duration: motionDuration, stagger: 0.18, ease: "power2.inOut" }}, motionStart);
           }}
@@ -1372,9 +1386,9 @@ def apply_creative_plan(scenes: list[dict[str, Any]], creative_plan: dict[str, A
 
 
 def choose_premium_motif(scene: dict[str, Any], requested: str, used: set[str]) -> str:
-    if requested in PREMIUM_MOTIFS and requested not in used:
-        return requested
     text = f"{scene.get('headline', '')}{scene.get('subline', '')}{scene.get('quote', '')}"
+    if requested in PREMIUM_MOTIFS and requested not in used and motif_matches_subject(requested, text):
+        return requested
     candidates: list[str] = []
     if re.search(r"白光|光谱|彩虹|颜色|波长", text):
         candidates.append("spectrum_prism")
@@ -1384,6 +1398,8 @@ def choose_premium_motif(scene: dict[str, Any], requested: str, used: set[str]) 
         candidates.append("atmospheric_globe")
     if re.search(r"日落|地平线|路径|路程|穿过", text):
         candidates.append("horizon_path")
+    if re.search(r"权限|边界|限制|限定|范围", text):
+        candidates.append("layered_scale")
     semantic = str(scene.get("semantic_motion") or "system")
     candidates.extend(
         {
@@ -1396,6 +1412,16 @@ def choose_premium_motif(scene: dict[str, Any], requested: str, used: set[str]) 
     )
     candidates.extend(["split_synthesis", "timeline_curve", "flow_machine", "orbital_system"])
     return next((motif for motif in candidates if motif not in used), candidates[0])
+
+
+def motif_matches_subject(motif: str, text: str) -> bool:
+    requirements = {
+        "spectrum_prism": r"光谱|白光|彩虹|颜色|波长|棱镜",
+        "atmospheric_globe": r"天空|大气|星球|地球|太阳|气候",
+        "horizon_path": r"日落|日出|地平线|太阳|大气路径",
+    }
+    pattern = requirements.get(motif)
+    return not pattern or bool(re.search(pattern, text))
 
 
 def _layout_css(width: int, height: int) -> str:

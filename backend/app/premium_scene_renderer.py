@@ -30,6 +30,7 @@ def premium_scene_css(width: int, height: int, theme: dict[str, Any]) -> str:
     stage_height = 1090 if portrait else 650
     return f"""
       .premium-scene .headline {{ font-weight: 900; text-shadow: 0 12px 48px rgba(0,0,0,.35); }}
+      .premium-scene .chip-row {{ display:none; }}
       .premium-stage {{ position:absolute; left:-4%; right:-4%; top:{stage_top}px; height:{stage_height}px; overflow:visible; }}
       .premium-stage .pm-label {{ position:absolute; padding:12px 18px; border-radius:999px; background:rgba(2,10,25,.72); border:1px solid rgba(255,255,255,.15); color:#f8fcff; font-size:{30 if portrait else 22}px; font-weight:750; box-shadow:0 16px 40px rgba(0,0,0,.25); z-index:8; }}
       .pm-sun {{ position:absolute; width:{170 if portrait else 145}px; height:{170 if portrait else 145}px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#fff9d2 0 9%,{accent} 38%,{warm} 73%,rgba(255,118,90,.1) 74%); box-shadow:0 0 55px {accent},0 0 150px rgba(255,118,90,.4); animation:pmSun 3s ease-in-out infinite; }}
@@ -53,13 +54,22 @@ def premium_scene_css(width: int, height: int, theme: dict[str, Any]) -> str:
       .pm-split {{ position:absolute; inset:0; display:grid; grid-template-columns:1fr 150px 1fr; gap:28px; align-items:center; }}
       .pm-side {{ position:relative; height:88%; border-radius:42px; overflow:hidden; border:1px solid rgba(255,255,255,.16); box-shadow:0 28px 75px rgba(0,0,0,.28); }}
       .pm-side.cool {{ background:radial-gradient(circle at 25% 20%,#b9e9ff,{primary} 42%,#063363); }} .pm-side.warm {{ background:radial-gradient(circle at 74% 62%,#ffd27e,{warm} 27%,#542642 65%,#111429); }}
-      .pm-side h3 {{ position:absolute; left:28px; top:26px; padding:10px 16px; border-radius:15px; background:#eefaff; color:#061326; font-size:{32 if not portrait else 27}px; }} .pm-side.warm h3{{background:#160e25;color:#fff}}
+      .pm-side h3 {{ position:absolute; left:28px; top:26px; padding:10px 16px; border-radius:15px; background:#eefaff; color:#061326; font-size:{36 if not portrait else 30}px; }} .pm-side.warm h3{{background:#160e25;color:#fff}}
       .pm-side p {{ position:absolute; left:32px; bottom:28px; padding:10px 14px; border-radius:14px; background:rgba(2,8,22,.9); color:#fff; font-size:{24 if not portrait else 22}px; line-height:1.45; font-weight:750; text-shadow:0 3px 16px #000; }}
       .pm-equals {{ width:132px; height:132px; border-radius:50%; display:grid; place-items:center; text-align:center; font-size:21px; font-weight:900; background:rgba(2,8,22,.78); border:2px solid rgba(255,255,255,.22); box-shadow:0 0 0 15px rgba(255,255,255,.05),0 0 65px rgba(89,200,255,.25); animation:pmNode 3s ease-in-out infinite; z-index:6; }}
       .pm-flow-line {{ position:absolute; height:8px; border-radius:9px; background:linear-gradient(90deg,{primary},{secondary},{accent}); box-shadow:0 0 24px rgba(89,200,255,.5); transform-origin:left; animation:pmBeam 2.2s ease-in-out infinite; }}
       .pm-data-bar {{ position:absolute; bottom:30px; width:110px; border-radius:30px 30px 10px 10px; background:linear-gradient(180deg,{primary},{secondary}); box-shadow:0 0 45px rgba(89,200,255,.25); animation:pmData 3s ease-in-out infinite; }}
       .pm-cool-particle {{ position:absolute; width:18px; height:18px; border-radius:50%; background:{primary}; box-shadow:0 0 24px {primary}; }}
       .pm-warm-core {{ position:absolute; left:50%; top:52%; width:110px; height:110px; transform:translate(-50%,-50%); border-radius:50%; background:radial-gradient(circle,#fff7c7 0 12%,{accent} 34%,{warm} 66%,transparent 68%); box-shadow:0 0 70px {warm}; }}
+      .pm-machine-hub {{ position:absolute; left:8%; top:31%; width:230px; height:230px; display:grid; place-items:center; border-radius:50%; background:radial-gradient(circle at 38% 32%,#e9fbff,{primary} 8%,#164a7a 46%,#06162d 70%); border:3px solid rgba(150,225,255,.65); box-shadow:0 0 0 24px rgba(89,200,255,.08),0 0 90px rgba(89,200,255,.42); font-size:28px; font-weight:900; }}
+      .pm-tool {{ position:absolute; right:7%; width:270px; min-height:96px; display:flex; align-items:center; gap:18px; padding:18px 24px; border-radius:28px; background:linear-gradient(120deg,rgba(12,39,70,.92),rgba(14,78,91,.72)); border:1px solid rgba(137,235,255,.38); box-shadow:0 18px 55px rgba(0,0,0,.28); font-size:25px; font-weight:800; }}
+      .pm-tool::before {{ content:""; width:38px; height:38px; flex:none; border-radius:12px; background:linear-gradient(145deg,{primary},{secondary}); box-shadow:0 0 28px rgba(89,200,255,.55); }}
+      .pm-packet {{ position:absolute; left:24%; top:48%; width:22px; height:22px; border-radius:50%; background:{accent}; box-shadow:0 0 28px {accent}; }}
+      .pm-memory-vault {{ position:absolute; right:7%; top:6%; width:360px; min-height:150px; padding:28px; border-radius:38px; background:linear-gradient(145deg,rgba(20,78,105,.9),rgba(7,24,48,.94)); border:2px solid rgba(98,226,189,.5); box-shadow:0 28px 80px rgba(0,0,0,.3),inset 0 0 55px rgba(98,226,189,.08); }}
+      .pm-memory-vault strong {{ display:block; font-size:32px; margin-bottom:14px; }} .pm-memory-vault span {{ display:inline-block; margin:5px 5px 0 0; padding:9px 14px; border-radius:12px; background:rgba(255,255,255,.1); font-size:24px; }}
+      .pm-boundary {{ position:absolute; left:8%; right:8%; top:5%; bottom:5%; border:4px solid rgba(255,211,106,.72); border-radius:56px; box-shadow:inset 0 0 90px rgba(255,211,106,.08),0 0 60px rgba(255,211,106,.14); }}
+      .pm-boundary::before {{ content:"权限边界"; position:absolute; left:34px; top:-22px; padding:9px 18px; border-radius:999px; background:{accent}; color:#07111f; font-size:22px; font-weight:900; }}
+      .pm-boundary-inner {{ position:absolute; left:20%; right:8%; top:18%; bottom:14%; border:2px dashed rgba(89,200,255,.55); border-radius:44px; background:radial-gradient(circle at 50% 50%,rgba(89,200,255,.16),transparent 68%); }}
       @keyframes pmSun{{50%{{transform:scale(1.06);filter:brightness(1.1)}}}} @keyframes pmBeam{{50%{{opacity:.58;filter:brightness(1.35)}}}} @keyframes pmFloat{{50%{{transform:translate(10px,-18px)}}}} @keyframes pmDash{{to{{stroke-dashoffset:-82}}}} @keyframes pmAtmosphere{{50%{{transform:translateX(-50%) scale(1.025);opacity:.78}}}} @keyframes pmPhoton{{50%{{transform:translate(38px,-32px);opacity:.55}}}} @keyframes pmSpin{{to{{transform:translate(-50%,-50%) rotate(360deg)}}}} @keyframes pmNode{{50%{{transform:scale(1.08);filter:brightness(1.18)}}}} @keyframes pmCell{{50%{{transform:translate(8px,-14px) rotate(3deg)}}}} @keyframes pmLayer{{50%{{transform:translateX(-50%) scale(1.035);opacity:.68}}}} @keyframes pmData{{50%{{transform:scaleY(.92);filter:brightness(1.2)}}}}
     """
 
@@ -84,13 +94,21 @@ def render_premium_scene(scene: dict[str, Any]) -> str:
     if motif == "cell_network":
         cells = "".join(f'<span class="pm-cell pm-beat" style="left:{7+(i%4)*24}%;top:{8+(i//4)*48}%;animation-delay:-{i*.6:.2f}s"></span>' for i in range(8))
         return f'<div class="premium-stage">{cells}<svg class="pm-beat" style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 1000 500"><path class="pm-path pm-blue" stroke-width="5" d="M110 100 C280 40 360 185 505 130 S740 40 890 115 M110 375 C275 430 360 285 505 350 S740 440 890 360"/></svg>{_label(labels[0], 42, 40)}</div>'
-    if motif in {"orbital_system", "layered_scale"}:
+    if motif == "orbital_system":
         layers = "".join(f'<div class="pm-layer pm-beat" style="top:{8+i*7}%;width:{72-i*13}%;height:{88-i*14}%;animation-delay:-{i*.65:.2f}s"></div>' for i in range(4))
         nodes = "".join(f'<div class="pm-node pm-beat" style="left:{12+i*24}%;top:{24+(i%2)*38}%"></div>' for i in range(4))
         return f'<div class="premium-stage">{layers}{nodes}{_label(labels[0], 42, 42)}{_label(labels[1], 72, 18)}{_label(labels[2], 15, 72)}</div>'
-    if motif in {"timeline_curve", "flow_machine"}:
+    if motif == "layered_scale":
+        nodes = "".join(f'<div class="pm-node pm-beat" style="left:{32+i*16}%;top:{42+(i%2)*16}%"></div>' for i in range(3))
+        return f'<div class="premium-stage"><div class="pm-observer pm-beat" style="left:11%;top:37%"></div><div class="pm-boundary pm-beat"><div class="pm-boundary-inner">{nodes}{_label(labels[1], 38, 18)}{_label(labels[2], 60, 68)}</div></div>{_label(labels[0], 8, 72)}</div>'
+    if motif == "flow_machine":
+        tools = "".join(f'<div class="pm-tool pm-beat" style="top:{7+i*31}%">{html.escape(labels[i+1])}</div>' for i in range(3))
+        paths = '<svg class="pm-beat" style="position:absolute;left:21%;top:4%;width:62%;height:90%" viewBox="0 0 900 520"><path class="pm-path pm-blue" stroke-width="7" d="M30 260 C260 250 380 90 850 78"/><path class="pm-path pm-blue" stroke-width="7" d="M30 260 C330 260 560 260 850 260"/><path class="pm-path pm-blue" stroke-width="7" d="M30 260 C260 275 390 430 850 442"/></svg>'
+        packets = "".join(f'<span class="pm-packet pm-beat" style="top:{27+i*20}%"></span>' for i in range(3))
+        return f'<div class="premium-stage"><div class="pm-machine-hub pm-beat">{html.escape(labels[0])}</div>{paths}{packets}{tools}</div>'
+    if motif == "timeline_curve":
         nodes = "".join(f'<div class="pm-node pm-beat" style="left:{8+i*27}%;top:{68-i*14}%"></div>{_label(labels[i], 5+i*27, 82-i*14)}' for i in range(4))
-        return f'<div class="premium-stage"><svg class="pm-beat" style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 1000 500"><path class="pm-path pm-blue" stroke-width="9" d="M35 380 C250 350 310 275 470 260 S730 140 960 90"/></svg>{nodes}</div>'
+        return f'<div class="premium-stage"><svg class="pm-beat" style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 1000 500"><path class="pm-path pm-blue" stroke-width="9" d="M35 380 C250 350 310 275 470 260 S730 140 960 90"/></svg>{nodes}<div class="pm-memory-vault pm-beat"><strong>{html.escape(labels[2])}</strong><span>{html.escape(labels[0])}</span><span>{html.escape(labels[1])}</span></div></div>'
     if motif == "data_landscape":
         bars = "".join(f'<div class="pm-data-bar pm-beat" style="left:{12+i*18}%;height:{160+i*55}px;animation-delay:-{i*.4:.2f}s"></div>{_label(labels[i], 9+i*18, 8)}' for i in range(4))
         return f'<div class="premium-stage">{bars}</div>'

@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 from backend.app import aliyun_speech, science_content
 from backend.app.ingest import build_audio_scene_seed, build_subtitle_cues, infer_semantic_motion, segment_script_for_tts
 from backend.app.jiuwen_team import normalize_creative_plan
-from backend.app.managed_faceless_builder import apply_creative_plan, render_semantic_science_markup
+from backend.app.managed_faceless_builder import apply_creative_plan, motif_matches_subject, render_semantic_science_markup
 from backend.app.premium_scene_renderer import render_premium_scene
 
 
@@ -90,6 +90,10 @@ class SciencePipelineTests(unittest.TestCase):
         }
         result = apply_creative_plan([scene], {"scenes": []})
         self.assertEqual(result[0]["motif"], "particle_scatter")
+
+    def test_nature_specific_motif_is_rejected_for_software_topic(self):
+        self.assertFalse(motif_matches_subject("atmospheric_globe", "智能体在权限边界内循环执行任务"))
+        self.assertTrue(motif_matches_subject("atmospheric_globe", "阳光穿过地球大气层"))
 
     def test_caption_does_not_isolate_comma_lead_in(self):
         words = [

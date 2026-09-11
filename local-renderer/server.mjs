@@ -213,8 +213,7 @@ async function extractContactSheet(videoPath, outputPath, duration, projectDir, 
     }
     const columns = sampleTimes.length === 3 ? 3 : sampleTimes.length <= 4 ? 2 : sampleTimes.length <= 6 ? 3 : sampleTimes.length <= 10 ? 4 : 5;
     const rows = Math.ceil(sampleTimes.length / columns);
-    const lastRowCount = sampleTimes.length - columns * (rows - 1);
-    const lastRowOffset = Math.round((columns - lastRowCount) * tileWidth / 2);
+    const lastRowOffset = 0;
     const layout = Array.from({ length: sampleTimes.length }, (_, index) => {
       const row = Math.floor(index / columns);
       const column = index % columns;
