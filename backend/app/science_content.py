@@ -61,39 +61,66 @@ def _fit_narration_length(brief: dict[str, Any], target_chars: int) -> dict[str,
     current_chars = sum(len(str(item.get("narration") or "")) for item in brief.get("chapters") or [])
     if current_chars <= int(target_chars * 1.15):
         return brief
-    response = create_client().chat.completions.create(
-        model=deepseek_settings()["pro_model"],
-        messages=[
-            {
-                "role": "system",
-                "content": """你是中文科普讲稿压缩编辑。只输出 JSON：{"chapters":[{"title":"","narration":"","visual_claim":"","motion":"mechanism|scale|comparison|timeline|system","evidence_ids":[]}]}。章节数量和顺序保持不变，保留事实、motion 与 evidence_ids，只压缩 narration、title 和 visual_claim。旁白必须口语自然，不得增加原稿没有的数字或来源，不使用制作术语，严格满足总字数范围。""",
-            },
-            {
-                "role": "user",
-                "content": json.dumps(
-                    {
-                        "target_total_characters": {
-                            "minimum": int(target_chars * 0.85),
-                            "maximum": int(target_chars * 1.1),
+    candidate = brief
+    for attempt in range(2):
+        response = create_client().chat.completions.create(
+            model=deepseek_settings()["pro_model"],
+            messages=[
+                {
+                    "role": "system",
+                    "content": """你是中文科普讲稿压缩编辑。只输出 JSON：{"chapters":[{"title":"","narration":"","visual_claim":"","motion":"mechanism|scale|comparison|timeline|system","evidence_ids":[]}]}。章节数量和顺序保持不变，保留事实、motion 与 evidence_ids，只压缩 narration、title 和 visual_claim。旁白必须口语自然，不得增加原稿没有的数字或来源，不使用制作术语，严格满足总字数范围。""",
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "attempt": attempt + 1,
+                            "target_total_characters": {
+                                "minimum": int(target_chars * 0.82),
+                                "maximum": int(target_chars * (1.05 if attempt else 1.1)),
+                            },
+                            "brief": candidate,
                         },
-                        "brief": brief,
-                    },
-                    ensure_ascii=False,
-                ),
-            },
-        ],
-        temperature=0.2,
-        max_tokens=1800,
-        extra_body={"thinking": {"type": "disabled"}},
-    )
-    fitted_payload = parse_json_object(response.choices[0].message.content)
-    fitted = fitted_payload.get("brief") if isinstance(fitted_payload.get("brief"), dict) else fitted_payload
-    chapters = [item for item in fitted.get("chapters") or [] if str(item.get("narration") or "").strip()]
-    fitted_chars = sum(len(str(item.get("narration") or "")) for item in chapters)
-    if len(chapters) < 3 or fitted_chars > int(target_chars * 1.15):
-        raise RuntimeError(f"Agent 生成的科普讲稿仍超过目标时长（{fitted_chars}/{target_chars} 字），请在对话中调整要求。")
-    fitted["chapters"] = chapters
-    return {**brief, "chapters": chapters}
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            temperature=0.15,
+            max_tokens=1800,
+            extra_body={"thinking": {"type": "disabled"}},
+        )
+        fitted_payload = parse_json_object(response.choices[0].message.content)
+        fitted = fitted_payload.get("brief") if isinstance(fitted_payload.get("brief"), dict) else fitted_payload
+        chapters = [item for item in fitted.get("chapters") or [] if str(item.get("narration") or "").strip()]
+        if len(chapters) < 3:
+            raise RuntimeError("Agent 压缩讲稿时丢失了必要章节。")
+        candidate = {**brief, "chapters": chapters}
+        fitted_chars = sum(len(str(item.get("narration") or "")) for item in chapters)
+        if fitted_chars <= int(target_chars * 1.1):
+            return candidate
+    candidate["chapters"] = _hard_fit_chapters(candidate["chapters"], int(target_chars * 1.08))
+    return candidate
+
+
+def _hard_fit_chapters(chapters: list[dict[str, Any]], maximum: int) -> list[dict[str, Any]]:
+    total = sum(len(str(item.get("narration") or "")) for item in chapters) or 1
+    result: list[dict[str, Any]] = []
+    for item in chapters:
+        narration = str(item.get("narration") or "").strip()
+        allowance = max(18, int(maximum * len(narration) / total))
+        if len(narration) > allowance:
+            window = narration[:allowance]
+            cut = max(window.rfind(mark) for mark in "。！？；，")
+            if cut >= int(allowance * 0.65):
+                narration = window[: cut + 1]
+            else:
+                narration = window.rstrip("，；：、 ") + "。"
+        result.append({**item, "narration": narration})
+    while sum(len(str(item.get("narration") or "")) for item in result) > maximum:
+        longest = max(result, key=lambda item: len(str(item.get("narration") or "")))
+        text = str(longest.get("narration") or "").rstrip("。")
+        longest["narration"] = text[:-1].rstrip("，；：、 ") + "。"
+    return result
 
 
 def _verify_public_sources(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

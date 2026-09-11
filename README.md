@@ -9,10 +9,10 @@ FrameCraft-CN 把一个科普主题、一篇中文文案或一段音视频，转
 - 输入主题：DeepSeek 自动生成科普讲稿、章节、视觉主张和来源台账，再调用阿里云 TTS。
 - 输入文案：严格按照用户原文生成阿里云 TTS、字幕和视频，不改写正文。
 - 上传媒体：阿里云 ASR 转写音频或视频原音轨；最终成片完整使用原音频，不重新配音。
-- 多 Agent 设计：内容、视觉、时序专家并行工作，代码总监生成当前项目的唯一创意规格。
-- 科学语义动画：机制、尺度、对比、时间线和系统关系使用不同空间结构与持续动画。
+- 多 Agent 设计：内容、视觉、时序专家并行调研，总导演建立艺术圣经，每个场景由独立 Agent 设计，整合 Agent 统一成片节奏。
+- 科学语义动画：每幕从十二种科学视觉母题中按内容选择独立构图，并保留入场、持续演化和退场衔接。
 - 真实 HyperFrames：本地 Renderer 调用 HyperFrames `--strict` 渲染 H.264/AAC MP4。
-- 双重验收：本地 `ffprobe` 检查流和完整时长，DeepSeek 视觉模型检查八帧联系表。
+- 双重验收：本地 `ffprobe` 检查流和完整时长，DeepSeek 视觉模型逐幕检查入场、中段、退场三帧。
 - 项目隔离：每个项目拥有独立素材、聊天、Agent 跟踪、工程和版本记录。
 - 工程留云端：服务器保存可复渲染工程，MP4 只在用户电脑生成和下载。
 - 自动清理：生产环境默认清理超过 24 小时且没有活动任务的项目资源。
@@ -46,7 +46,10 @@ React 网页工作台
        -> narrative：科学叙事与信息层级
        -> visual：视觉隐喻与语义运动
        -> timing：节奏、字幕和同屏密度
-       -> code_director：DeepSeek Pro 汇总创意规格
+       -> art_director：DeepSeek Pro 制定全片艺术圣经和母题分配
+       -> scene_designer_N：每幕一个 DeepSeek Agent 并行设计角色、构图与动画节拍
+       -> code_director：DeepSeek Pro 合并逐幕方案并统一连续性
+       -> quality_critic：检查科学表达、场景差异和动态图形质量，不通过则触发一次完整修订
   -> 生成 HyperFrames HTML、时间线、字幕和来源台账
   -> 浏览器把工程包交给用户电脑的 FrameCraft Renderer
   -> HyperFrames --strict 真实渲染
@@ -60,8 +63,8 @@ React 网页工作台
 
 | 职责 | 默认模型或服务 |
 | --- | --- |
-| 内容、视觉、时序专家 | `deepseek-v4-flash` |
-| 科普写稿、代码总监 | `deepseek-v4-pro` |
+| 内容、视觉、时序与逐幕设计 Agent | `deepseek-v4-flash` |
+| 科普写稿、总导演、整合导演 | `deepseek-v4-pro` |
 | 成片视觉验收 | `deepseek-v4-flash-vision-exp` |
 | 文本转语音 | 阿里云百炼 `qwen3-tts-flash` |
 | 语音转文字 | 阿里云百炼 `qwen3-asr-flash` |
@@ -151,7 +154,7 @@ export FRAMECRAFT_LOCAL_RENDERER_CRF=30
 3. 点击“开始生成科普方案”，等待内容准备和 openJiuwen 多 Agent 分析。
 4. 查看方案并确认生成。
 5. 网页连接本地 Renderer，下载工程并执行 HyperFrames 严格渲染。
-6. 本机检查音视频流与完整时长，并生成临时八帧联系表。
+6. 本机检查音视频流与完整时长，并按每幕入场、中段、退场生成临时联系表。
 7. 云端视觉 Agent 验收后删除联系表；通过时 MP4 直接进入当前浏览器预览和下载。
 8. 在项目聊天中继续提出修改，当前项目 Agent 基于同一上下文生成新版本。
 
@@ -164,7 +167,7 @@ export FRAMECRAFT_LOCAL_RENDERER_CRF=30
 - 机制、尺度、对比、时间线和系统关系使用不同主视觉结构。
 - 关键节点逐个出现，并具有表达含义的持续运动。
 - 主视觉充分利用画幅，避免拥挤、遮挡与无意义空白。
-- HyperFrames 必须以 `--strict` 运行；视觉评分低于 75 时不登记通过版本。
+- HyperFrames 必须以 `--strict` 运行；视觉评分低于 82 时不登记通过版本。
 
 ## 测试
 

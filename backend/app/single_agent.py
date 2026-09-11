@@ -927,6 +927,7 @@ class SingleAgentRunner:
                 for scene in timeline.get("scenes") or []
                 if float(scene.get("end_time") or 0) > float(scene.get("start_time") or 0)
             ],
+            "contact_sample_strategy": "entry_mid_late_per_scene",
         }
         (vdir / "local_render_manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -999,6 +1000,7 @@ class SingleAgentRunner:
                 )
             project = snapshot["projects"].get(project_id) or {}
             creative_plan = _safe_json(store.project_dir(project_id) / "analysis" / "creative_plan.json")
+            timeline = _safe_json(version_dir / "timeline.json")
             transcript_path = store.project_dir(project_id) / "input" / "transcript.txt"
             source_text = transcript_path.read_text(encoding="utf-8", errors="replace") if transcript_path.is_file() else ""
             review = run_visual_review(
@@ -1009,7 +1011,7 @@ class SingleAgentRunner:
                     "requires_source_labels": project.get("input_mode") == "topic",
                     "duration_s": expected_duration,
                     "source_transcript": source_text,
-                    "scenes": creative_plan.get("scenes") or [],
+                    "scenes": timeline.get("scenes") or creative_plan.get("scenes") or [],
                 },
             )
             review["media_validation"] = media_validation
@@ -1017,7 +1019,7 @@ class SingleAgentRunner:
             (version_dir / "agent_visual_review.json").write_text(
                 json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8"
             )
-            if not review.get("pass") or float(review.get("score") or 0) < 75:
+            if not review.get("pass") or float(review.get("score") or 0) < 82:
                 issue_texts = []
                 for issue in review.get("issues") or []:
                     if isinstance(issue, dict):
@@ -1087,7 +1089,7 @@ class SingleAgentRunner:
         job = snapshot["jobs"][job_id]
         project_id = job["project_id"]
         project = snapshot["projects"].get(project_id) or {}
-        self._append_log(job_id, "openJiuwen 多 Agent 团队开始生成 HyperFrames 工程。", chat=True)
+        self._append_log(job_id, "openJiuwen 多 Agent 团队开始生成 HyperFrames 工程：总导演统一风格，逐幕 Agent 分别设计科学动画。", chat=True)
         self._set_step(job_id, 24, "正在创建版本目录与渲染工程")
 
         version_count = len([v for v in snapshot["versions"].values() if v["project_id"] == project_id])
@@ -1114,14 +1116,19 @@ class SingleAgentRunner:
         if creative_path.is_file():
             creative_plan = _safe_json(creative_path)
         else:
-            self._set_step(job_id, 32, "openJiuwen 专家团队正在并行设计")
+            self._set_step(job_id, 32, "总导演与逐幕 Agent 正在并行设计")
             team_result = run_creative_team(project_id, self._team_payload(project, prepared))
             creative_plan = team_result["creative_plan"]
             creative_path.parent.mkdir(parents=True, exist_ok=True)
             creative_path.write_text(json.dumps(creative_plan, ensure_ascii=False, indent=2), encoding="utf-8")
             trace_path.write_text(json.dumps(team_result, ensure_ascii=False, indent=2), encoding="utf-8")
+            self._append_log(
+                job_id,
+                f"艺术圣经已经确定，{len(team_result.get('scene_agents') or [])} 位逐幕 Agent 已完成独立设计，整合 Agent 正在统一节奏。",
+                chat=True,
+            )
 
-        self._set_step(job_id, 48, "代码 Agent 正在生成字幕、动画与画面布局")
+        self._set_step(job_id, 48, "整合 Agent 正在生成字幕、连续动画与画面布局")
         summary = materialize_science_video_version(
             project=project,
             prepared=prepared,
@@ -1190,7 +1197,7 @@ class SingleAgentRunner:
         (version_dir / "agent_visual_review.json").write_text(
             json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        if not review.get("pass") or float(review.get("score") or 0) < 75:
+        if not review.get("pass") or float(review.get("score") or 0) < 82:
             raise RuntimeError(f"视觉 Agent 验收未通过：{'; '.join(review.get('issues') or [review.get('summary') or '质量不足'])}")
 
         self._set_step(job_id, 94, "正在注册版本与整理下载产物")
@@ -1211,8 +1218,8 @@ class SingleAgentRunner:
         snapshot = store.snapshot()
         job = snapshot["jobs"][job_id]
         project = snapshot["projects"].get(job["project_id"]) or {}
-        self._append_log(job_id, "openJiuwen 多 Agent 团队并行分析内容、视觉与时序。", chat=True)
-        self._set_step(job_id, 30, "openJiuwen 专家团队正在并行分析")
+        self._append_log(job_id, "openJiuwen 多 Agent 团队开始分析：内容、视觉、时序专家并行，总导演和逐幕 Agent 接力设计。", chat=True)
+        self._set_step(job_id, 30, "总导演与逐幕 Agent 正在并行分析")
         summary = build_science_video_analysis(project, prepared)
         team_result = run_creative_team(str(project.get("id")), self._team_payload(project, prepared))
         analysis_dir = store.project_dir(str(project.get("id"))) / "analysis"
@@ -1222,6 +1229,11 @@ class SingleAgentRunner:
         )
         (analysis_dir / "agent_trace.json").write_text(
             json.dumps(team_result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        self._append_log(
+            job_id,
+            f"艺术圣经与 {len(team_result.get('scene_agents') or [])} 幕独立动画设计已完成。",
+            chat=True,
         )
         summary["analysis"]["multi_agent"] = {
             "framework": "openjiuwen",

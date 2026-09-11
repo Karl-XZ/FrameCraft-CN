@@ -166,33 +166,44 @@ async function extractContactSheet(videoPath, outputPath, duration, projectDir, 
     (scene) => Number(scene.end_s) > Number(scene.start_s),
   );
   if (manifestScenes.length) {
-    const selected = manifestScenes.length <= 8
+    const selected = manifestScenes.length <= 6
       ? manifestScenes
-      : Array.from({ length: 8 }, (_, index) => manifestScenes[Math.round(index * (manifestScenes.length - 1) / 7)]);
-    sampleTimes = selected.map((scene) => Math.max(0.05, (Number(scene.start_s) + Number(scene.end_s)) / 2));
+      : Array.from({ length: 6 }, (_, index) => manifestScenes[Math.round(index * (manifestScenes.length - 1) / 5)]);
+    sampleTimes = selected.flatMap((scene) => {
+      const start = Number(scene.start_s);
+      const end = Number(scene.end_s);
+      const span = end - start;
+      return [0.18, 0.5, 0.82].map((phase) => Math.max(0.05, start + span * phase));
+    });
   }
   try {
     if (!sampleTimes.length) {
       const timeline = JSON.parse(await readFile(path.join(projectDir, 'timeline.json'), 'utf8'));
       const scenes = (timeline.scenes || []).filter((scene) => Number(scene.end_time) > Number(scene.start_time));
-      const selected = scenes.length <= 8
+      const selected = scenes.length <= 6
         ? scenes
-        : Array.from({ length: 8 }, (_, index) => scenes[Math.round(index * (scenes.length - 1) / 7)]);
-      sampleTimes = selected.map((scene) => Math.max(0.05, (Number(scene.start_time) + Number(scene.end_time)) / 2));
+        : Array.from({ length: 6 }, (_, index) => scenes[Math.round(index * (scenes.length - 1) / 5)]);
+      sampleTimes = selected.flatMap((scene) => {
+        const start = Number(scene.start_time);
+        const end = Number(scene.end_time);
+        const span = end - start;
+        return [0.18, 0.5, 0.82].map((phase) => Math.max(0.05, start + span * phase));
+      });
     }
   } catch {
     sampleTimes = [];
   }
   if (!sampleTimes.length) {
-    sampleTimes = Array.from({ length: 8 }, (_, index) => Math.max(0.05, duration * (index + 0.5) / 8));
+    sampleTimes = Array.from({ length: 12 }, (_, index) => Math.max(0.05, duration * (index + 0.5) / 12));
   }
+  const tileWidth = sampleTimes.length > 10 ? 384 : 480;
   const framesDir = path.join(path.dirname(outputPath), 'contact-frames');
   await mkdir(framesDir, { recursive: true });
   try {
     for (let index = 0; index < sampleTimes.length; index += 1) {
       await run(
         'ffmpeg',
-        ['-y', '-v', 'error', '-ss', String(sampleTimes[index]), '-i', videoPath, '-frames:v', '1', '-vf', 'scale=480:-2', path.join(framesDir, `frame-${String(index).padStart(2, '0')}.jpg`)],
+        ['-y', '-v', 'error', '-ss', String(sampleTimes[index]), '-i', videoPath, '-frames:v', '1', '-vf', `scale=${tileWidth}:-2`, path.join(framesDir, `frame-${String(index).padStart(2, '0')}.jpg`)],
         {},
       );
     }
@@ -200,15 +211,16 @@ async function extractContactSheet(videoPath, outputPath, duration, projectDir, 
       await copyFile(path.join(framesDir, 'frame-00.jpg'), outputPath);
       return sampleTimes.map((value) => Number(value.toFixed(3)));
     }
-    const columns = sampleTimes.length === 3 ? 3 : sampleTimes.length <= 4 ? 2 : sampleTimes.length <= 6 ? 3 : 4;
+    const columns = sampleTimes.length === 3 ? 3 : sampleTimes.length <= 4 ? 2 : sampleTimes.length <= 6 ? 3 : sampleTimes.length <= 10 ? 4 : 5;
     const rows = Math.ceil(sampleTimes.length / columns);
     const lastRowCount = sampleTimes.length - columns * (rows - 1);
-    const lastRowOffset = Math.round((columns - lastRowCount) * 480 / 2);
+    const lastRowOffset = Math.round((columns - lastRowCount) * tileWidth / 2);
     const layout = Array.from({ length: sampleTimes.length }, (_, index) => {
       const row = Math.floor(index / columns);
       const column = index % columns;
       const offset = row === rows - 1 ? lastRowOffset : 0;
-      return `${offset + column * 480}_${row === 0 ? 0 : 'h0'}`;
+      const y = row === 0 ? '0' : Array.from({ length: row }, () => 'h0').join('+');
+      return `${offset + column * tileWidth}_${y}`;
     }).join('|');
     const inputArgs = [];
     for (let index = 0; index < sampleTimes.length; index += 1) {
@@ -268,6 +280,7 @@ async function render(job, fps) {
       projectDir,
       manifest,
     );
+    job.mediaValidation.contact_sample_strategy = 'entry_mid_late_per_scene';
     job.status = 'completed';
     job.progress = 100;
     job.step = '本地 HyperFrames 渲染完成';

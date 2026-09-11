@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .ingest import build_subtitle_cues, normalize_words
+from .premium_scene_renderer import PREMIUM_MOTIFS, premium_scene_css, render_premium_scene
 
 
 def materialize_science_video_version(
@@ -85,6 +86,7 @@ def build_science_video_analysis(project: dict[str, Any], prepared: Any) -> dict
                 "end": scene["end"],
                 "duration": scene["duration"],
                 "variant": scene["variant"],
+                "motif": scene.get("motif"),
                 "semanticMotion": scene.get("semantic_motion", "system"),
                 "semantic_motion": scene.get("semantic_motion"),
                 "headline": scene["headline"],
@@ -255,6 +257,7 @@ def render_html_document(
                 "start": scene["start"],
                 "end": scene["end"],
                 "variant": scene["variant"],
+                "motif": scene.get("motif"),
                 "steps": scene.get("steps", []),
                 "chips": scene.get("chips", []),
                 "valueCount": len(scene.get("values", [])),
@@ -265,6 +268,7 @@ def render_html_document(
     )
     title = html.escape(str(project.get("name") or "科普视频"))
     layout_css = _layout_css(width, height)
+    premium_css = premium_scene_css(width, height, theme)
     return f"""<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -818,6 +822,7 @@ def render_html_document(
       @keyframes flowAcross {{ 0% {{ left: 2%; opacity: 0; }} 12% {{ opacity: 1; }} 88% {{ opacity: 1; }} 100% {{ left: 92%; opacity: 0; }} }}
       @keyframes ringBreathe {{ 0%,100% {{ transform: scale(.96); opacity: .4; }} 50% {{ transform: scale(1.04); opacity: .92; }} }}
       @keyframes orbitSpin {{ to {{ transform: rotate(360deg); }} }}
+      {premium_css}
     </style>
   </head>
   <body>
@@ -847,41 +852,89 @@ def render_html_document(
       window.__timelines.main = tl;
       const cues = {cue_js};
       const scenes = {scene_js};
+      const setIfPresent = (selector, vars) => {{
+        if (document.querySelector(selector)) tl.set(selector, vars);
+      }};
+      const fromToIfPresent = (selector, fromVars, toVars, at) => {{
+        if (document.querySelector(selector)) tl.fromTo(selector, fromVars, toVars, at);
+      }};
 
-      tl.set(".headline, .subline, .chip, .process-board, .data-board, .knowledge-board, .story-board, .science-board", {{
+      setIfPresent(".headline, .subline, .chip, .process-board, .data-board, .knowledge-board, .story-board, .science-board, .premium-stage, .pm-beat", {{
         autoAlpha: 0
       }});
-      tl.set(".process-step, .metric-card, .bar-card, .satellite, .story-card, .story-dot", {{
+      setIfPresent(".process-step, .metric-card, .bar-card, .satellite, .story-card, .story-dot", {{
         autoAlpha: 0
       }});
       scenes.forEach((scene) => {{
         const base = "#" + scene.id;
         tl.fromTo(base + " .headline", {{ y: 34, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.75, ease: "power3.out" }}, scene.start + 0.08);
         tl.fromTo(base + " .subline", {{ y: 28, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.65, ease: "power2.out" }}, scene.start + 0.22);
-        tl.fromTo(base + " .chip", {{ y: 18, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.48, stagger: 0.08, ease: "power2.out" }}, scene.start + 0.3);
-        tl.fromTo(base + " .science-board", {{ scale: 0.96, y: 34, autoAlpha: 0 }}, {{ scale: 1, y: 0, autoAlpha: 1, duration: 0.82, ease: "power3.out" }}, scene.start + 0.2);
-        tl.fromTo(base + " .science-label", {{ y: 18, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.16, ease: "power2.out" }}, scene.start + 0.48);
-
-        if (scene.variant === "process") {{
-          tl.fromTo(base + " .process-board", {{ x: 56, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.7, ease: "power3.out" }}, scene.start + 0.22);
-          tl.fromTo(base + " .process-step", {{ x: 22, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.55, stagger: 0.22, ease: "power2.out" }}, scene.start + 0.38);
+        fromToIfPresent(base + " .chip", {{ y: 18, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.48, stagger: 0.08, ease: "power2.out" }}, scene.start + 0.3);
+        const premium = document.querySelector(base + " .premium-stage");
+        if (premium) {{
+          tl.fromTo(base + " .premium-stage", {{ y: 34, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.85, ease: "power3.out" }}, scene.start + 0.18);
+          tl.fromTo(base + " .pm-beat", {{ autoAlpha: 0, filter: "blur(10px)" }}, {{ autoAlpha: 1, filter: "blur(0px)", duration: 0.62, stagger: 0.13, ease: "power2.out" }}, scene.start + 0.48);
+          const motionStart = scene.start + 0.55;
+          const motionDuration = Math.max(1.4, scene.end - motionStart - 0.55);
+          const motif = scene.motif || "";
+          tl.to(base + " .pm-label", {{ y: -14, duration: motionDuration, stagger: 0.08, ease: "sine.inOut" }}, motionStart);
+          if (motif === "spectrum_prism") {{
+            tl.fromTo(base + " .pm-input-beam", {{ clipPath: "inset(0 100% 0 0)" }}, {{ clipPath: "inset(0 0% 0 0)", duration: Math.min(1.6, motionDuration * 0.24), ease: "power2.out" }}, motionStart);
+            tl.fromTo(base + " .pm-spectrum-ray", {{ clipPath: "inset(0 100% 0 0)", opacity: 0.48 }}, {{ clipPath: "inset(0 0% 0 0)", opacity: 1, duration: motionDuration, stagger: 0.08, ease: "power1.inOut" }}, motionStart + 0.45);
+          }} else if (motif === "particle_scatter") {{
+            tl.to(base + " .pm-path", {{ strokeDashoffset: -420, duration: motionDuration, ease: "none" }}, motionStart);
+            tl.to(base + " .pm-molecule", {{ x: 120, y: -68, duration: motionDuration, stagger: 0.16, ease: "sine.inOut" }}, motionStart);
+          }} else if (motif === "atmospheric_globe") {{
+            tl.to(base + " .pm-photon", {{ x: 170, y: -105, opacity: 0.32, duration: motionDuration, stagger: 0.14, ease: "power1.inOut" }}, motionStart);
+            tl.to(base + " .pm-atmo-ray", {{ strokeDashoffset: -520, opacity: 0.48, duration: motionDuration, stagger: 0.12, ease: "none" }}, motionStart);
+            tl.to(base + " .pm-sun", {{ scale: 1.12, filter: "brightness(1.25)", duration: motionDuration, ease: "sine.inOut" }}, motionStart);
+          }} else if (motif === "horizon_path") {{
+            tl.to(base + " .pm-path", {{ strokeDashoffset: -520, duration: motionDuration, ease: "none" }}, motionStart);
+            tl.to(base + " .pm-sun", {{ x: 300, y: 48, scale: 0.72, duration: motionDuration, ease: "power1.inOut" }}, motionStart);
+          }} else if (motif === "split_synthesis" || motif === "field_comparison") {{
+            tl.fromTo(base + " .pm-flow-line", {{ clipPath: "inset(0 100% 0 0)" }}, {{ clipPath: "inset(0 0% 0 0)", duration: motionDuration, stagger: 0.2, ease: "power1.inOut" }}, motionStart);
+            tl.to(base + " .pm-side.cool", {{ opacity: 0.78, boxShadow: "0 20px 60px rgba(89,200,255,.38)", duration: motionDuration, ease: "sine.inOut" }}, motionStart);
+            tl.to(base + " .pm-side.warm", {{ boxShadow: "0 20px 85px rgba(255,118,90,.58)", duration: motionDuration, ease: "sine.inOut" }}, motionStart);
+            tl.to(base + " .pm-cool-particle", {{ x: 130, y: -75, opacity: 0.08, duration: motionDuration, stagger: 0.12, ease: "power1.in" }}, motionStart);
+            tl.to(base + " .pm-warm-core", {{ scale: 1.7, filter: "brightness(1.28)", duration: motionDuration, ease: "sine.inOut" }}, motionStart);
+          }} else if (motif === "cell_network") {{
+            tl.to(base + " .pm-cell", {{ x: 28, y: -32, rotation: 8, duration: motionDuration, stagger: 0.12, ease: "sine.inOut" }}, motionStart);
+            tl.to(base + " .pm-path", {{ strokeDashoffset: -360, duration: motionDuration, ease: "none" }}, motionStart);
+          }} else if (motif === "orbital_system" || motif === "layered_scale") {{
+            tl.to(base + " .pm-node", {{ y: -72, scale: 1.16, duration: motionDuration, stagger: 0.16, ease: "sine.inOut" }}, motionStart);
+            tl.to(base + " .pm-layer", {{ opacity: 0.42, borderColor: "rgba(255,211,106,.72)", duration: motionDuration, stagger: 0.1, ease: "sine.inOut" }}, motionStart);
+          }} else if (motif === "timeline_curve" || motif === "flow_machine") {{
+            tl.to(base + " .pm-path", {{ strokeDashoffset: -520, duration: motionDuration, ease: "none" }}, motionStart);
+            tl.to(base + " .pm-node", {{ y: -58, scale: 1.13, duration: motionDuration, stagger: 0.24, ease: "power1.inOut" }}, motionStart);
+          }} else if (motif === "data_landscape") {{
+            tl.fromTo(base + " .pm-data-bar", {{ scaleY: 0.28, transformOrigin: "bottom" }}, {{ scaleY: 1, duration: motionDuration, stagger: 0.18, ease: "power2.inOut" }}, motionStart);
+          }}
+          tl.to(base + " .premium-stage", {{ autoAlpha: 0, y: -24, duration: 0.42, ease: "power1.in" }}, Math.max(scene.start + 1, scene.end - 0.46));
+        }} else {{
+          fromToIfPresent(base + " .science-board", {{ scale: 0.96, y: 34, autoAlpha: 0 }}, {{ scale: 1, y: 0, autoAlpha: 1, duration: 0.82, ease: "power3.out" }}, scene.start + 0.2);
+          fromToIfPresent(base + " .science-label", {{ y: 18, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.16, ease: "power2.out" }}, scene.start + 0.48);
         }}
-        if (scene.variant === "data") {{
-          tl.fromTo(base + " .data-board", {{ x: 56, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.72, ease: "power3.out" }}, scene.start + 0.18);
-          tl.fromTo(base + " .metric-card", {{ y: 24, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.14, ease: "power2.out" }}, scene.start + 0.38);
+
+        if (!premium && scene.variant === "process") {{
+          fromToIfPresent(base + " .process-board", {{ x: 56, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.7, ease: "power3.out" }}, scene.start + 0.22);
+          fromToIfPresent(base + " .process-step", {{ x: 22, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.55, stagger: 0.22, ease: "power2.out" }}, scene.start + 0.38);
+        }}
+        if (!premium && scene.variant === "data") {{
+          fromToIfPresent(base + " .data-board", {{ x: 56, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.72, ease: "power3.out" }}, scene.start + 0.18);
+          fromToIfPresent(base + " .metric-card", {{ y: 24, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.14, ease: "power2.out" }}, scene.start + 0.38);
           Array.from({{ length: scene.valueCount }}).forEach((_, idx) => {{
             const sel = base + " .bar-card.bar-" + idx;
             tl.fromTo(sel, {{ y: 28, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.48, ease: "power2.out" }}, scene.start + 0.6 + idx * 0.16);
             tl.fromTo(sel + " .bar", {{ height: 0 }}, {{ height: sel && document.querySelector(sel + " .bar") ? document.querySelector(sel + " .bar").dataset.targetHeight : 0, duration: 0.65, ease: "power2.out" }}, scene.start + 0.72 + idx * 0.16);
           }});
         }}
-        if (scene.variant === "knowledge") {{
-          tl.fromTo(base + " .knowledge-board", {{ x: 56, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.72, ease: "power3.out" }}, scene.start + 0.16);
-          tl.fromTo(base + " .satellite", {{ scale: 0.92, autoAlpha: 0 }}, {{ scale: 1, autoAlpha: 1, duration: 0.52, stagger: 0.18, ease: "power2.out" }}, scene.start + 0.52);
+        if (!premium && scene.variant === "knowledge") {{
+          fromToIfPresent(base + " .knowledge-board", {{ x: 56, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.72, ease: "power3.out" }}, scene.start + 0.16);
+          fromToIfPresent(base + " .satellite", {{ scale: 0.92, autoAlpha: 0 }}, {{ scale: 1, autoAlpha: 1, duration: 0.52, stagger: 0.18, ease: "power2.out" }}, scene.start + 0.52);
         }}
-        if (scene.variant === "story") {{
-          tl.fromTo(base + " .story-board", {{ x: 58, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.72, ease: "power3.out" }}, scene.start + 0.18);
-          tl.fromTo(base + " .story-card, " + base + " .story-dot", {{ y: 24, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.52, stagger: 0.16, ease: "power2.out" }}, scene.start + 0.42);
+        if (!premium && scene.variant === "story") {{
+          fromToIfPresent(base + " .story-board", {{ x: 58, autoAlpha: 0 }}, {{ x: 0, autoAlpha: 1, duration: 0.72, ease: "power3.out" }}, scene.start + 0.18);
+          fromToIfPresent(base + " .story-card, " + base + " .story-dot", {{ y: 24, autoAlpha: 0 }}, {{ y: 0, autoAlpha: 1, duration: 0.52, stagger: 0.16, ease: "power2.out" }}, scene.start + 0.42);
         }}
 
         tl.to(base + " .headline, " + base + " .subline, " + base + " .chip", {{
@@ -908,8 +961,10 @@ def render_scene_markup(scene: dict[str, Any], width: int, height: int) -> str:
     chips = "\n".join(f'<div class="chip">{html.escape(text)}</div>' for text in scene["chips"][:4])
     main = render_variant_markup(scene, width, height)
     source = f'<div class="source-line">{html.escape(scene["source_label"])}</div>' if scene.get("source_label") else ""
+    motif = str(scene.get("motif") or "")
+    premium_class = f" premium-scene motif-{motif}" if motif in PREMIUM_MOTIFS else ""
     return f"""
-<section id="{html.escape(scene['scene_id'])}" class="scene clip variant-{scene['variant']} layout-{scene['layout']} scene-order-{scene['scene_number']}" data-start="{scene['start']:.3f}" data-duration="{scene['duration']:.3f}">
+<section id="{html.escape(scene['scene_id'])}" class="scene clip variant-{scene['variant']} layout-{scene['layout']} scene-order-{scene['scene_number']}{premium_class}" data-start="{scene['start']:.3f}" data-duration="{scene['duration']:.3f}">
   <div class="scene-shell">
     <div class="headline">{html.escape(scene['headline'])}</div>
     <div class="subline">{html.escape(scene['subline'])}</div>
@@ -923,6 +978,9 @@ def render_scene_markup(scene: dict[str, Any], width: int, height: int) -> str:
 
 
 def render_variant_markup(scene: dict[str, Any], width: int, height: int) -> str:
+    premium = render_premium_scene(scene)
+    if premium:
+        return premium
     semantic = render_semantic_science_markup(scene)
     if semantic:
         return semantic
@@ -1254,10 +1312,11 @@ def apply_creative_plan(scenes: list[dict[str, Any]], creative_plan: dict[str, A
     allowed_layouts = {"wide", "split-left", "split-right", "center"}
     previous_layout = ""
     layout_cycle = ["wide", "split-left", "center", "split-right"]
+    used_motifs: set[str] = set()
     for scene in scenes:
         item = overrides.get(int(scene["scene_number"]))
         if not item:
-            continue
+            item = {}
         variant = str(item.get("variant") or "")
         if variant in allowed_variants:
             scene["variant"] = variant
@@ -1270,15 +1329,25 @@ def apply_creative_plan(scenes: list[dict[str, Any]], creative_plan: dict[str, A
         if scene["layout"] == previous_layout:
             scene["layout"] = layout_cycle[(layout_cycle.index(previous_layout) + 1) % len(layout_cycle)]
         previous_layout = scene["layout"]
+        requested_motif = str(item.get("motif") or "").strip()
+        scene["motif"] = choose_premium_motif(scene, requested_motif, used_motifs)
+        used_motifs.add(scene["motif"])
         for key, max_len in (("headline", 20), ("subline", 32)):
-            value = normalize_text(str(item.get(key) or ""))[:max_len]
+            value = normalize_visible_text(str(item.get(key) or ""))[:max_len]
             if value:
                 scene[key] = value
         for key, limit, max_len in (("chips", 4, 10), ("steps", 4, 16)):
-            values = list(dict.fromkeys(normalize_text(str(value))[:max_len] for value in item.get(key) or []))
+            values = list(dict.fromkeys(normalize_visible_text(str(value))[:max_len] for value in item.get(key) or []))
             values = [value for value in values if value]
             if values:
                 scene[key] = values[:limit]
+        labels = list(dict.fromkeys(normalize_visible_text(str(value))[:10] for value in item.get("labels") or []))
+        if not labels:
+            labels = [normalize_text(str(value))[:10] for value in scene.get("chips") or []]
+        scene["labels"] = [value for value in labels if value][:4]
+        scene["actors"] = [value for value in item.get("actors") or [] if isinstance(value, dict)][:8]
+        scene["composition"] = item.get("composition") if isinstance(item.get("composition"), dict) else {}
+        scene["animation_beats"] = [value for value in item.get("animation_beats") or [] if isinstance(value, dict)][:8]
         supplied_values = []
         for value in item.get("values") or []:
             if not isinstance(value, dict):
@@ -1300,6 +1369,33 @@ def apply_creative_plan(scenes: list[dict[str, Any]], creative_plan: dict[str, A
         scene["core_sub"] = scene["subline"]
         scene["elements"] = [{"kind": scene["variant"], "text": value} for value in scene["steps"]]
     return scenes
+
+
+def choose_premium_motif(scene: dict[str, Any], requested: str, used: set[str]) -> str:
+    if requested in PREMIUM_MOTIFS and requested not in used:
+        return requested
+    text = f"{scene.get('headline', '')}{scene.get('subline', '')}{scene.get('quote', '')}"
+    candidates: list[str] = []
+    if re.search(r"白光|光谱|彩虹|颜色|波长", text):
+        candidates.append("spectrum_prism")
+    if re.search(r"分子|碰撞|散射|粒子", text):
+        candidates.append("particle_scatter")
+    if re.search(r"天空|大气|星球|地球|观察", text):
+        candidates.append("atmospheric_globe")
+    if re.search(r"日落|地平线|路径|路程|穿过", text):
+        candidates.append("horizon_path")
+    semantic = str(scene.get("semantic_motion") or "system")
+    candidates.extend(
+        {
+            "mechanism": ["flow_machine", "particle_scatter"],
+            "comparison": ["field_comparison", "split_synthesis"],
+            "scale": ["layered_scale", "data_landscape"],
+            "timeline": ["timeline_curve", "horizon_path"],
+            "system": ["orbital_system", "cell_network", "atmospheric_globe"],
+        }.get(semantic, ["orbital_system"])
+    )
+    candidates.extend(["split_synthesis", "timeline_curve", "flow_machine", "orbital_system"])
+    return next((motif for motif in candidates if motif not in used), candidates[0])
 
 
 def _layout_css(width: int, height: int) -> str:
@@ -1364,6 +1460,12 @@ def split_clauses(text: str) -> list[str]:
 
 def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").strip())
+
+
+def normalize_visible_text(text: str) -> str:
+    normalized = normalize_text(text)
+    forbidden = ("场景", "制作", "动画", "工作流", "FrameCraft", "Agent", "代码", "分镜")
+    return "" if any(word in normalized for word in forbidden) else normalized
 
 
 def _style_label(style: str) -> str:

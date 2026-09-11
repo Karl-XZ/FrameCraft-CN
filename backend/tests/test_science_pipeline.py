@@ -10,7 +10,9 @@ from unittest.mock import Mock, patch
 
 from backend.app import aliyun_speech, science_content
 from backend.app.ingest import build_audio_scene_seed, build_subtitle_cues, infer_semantic_motion, segment_script_for_tts
-from backend.app.managed_faceless_builder import render_semantic_science_markup
+from backend.app.jiuwen_team import normalize_creative_plan
+from backend.app.managed_faceless_builder import apply_creative_plan, render_semantic_science_markup
+from backend.app.premium_scene_renderer import render_premium_scene
 
 
 def wav_bytes(duration_s: float = 0.25) -> bytes:
@@ -48,6 +50,46 @@ class SciencePipelineTests(unittest.TestCase):
         }
         self.assertEqual(len(set(outputs.values())), 5)
         self.assertTrue(all('class="science-board' in markup for markup in outputs.values()))
+
+    def test_multi_agent_merge_preserves_scene_designer_details(self):
+        source = {"scenes": [{"scene_number": 1, "headline": "原始标题", "visual_claim": "光发生散射"}]}
+        art = {
+            "art_bible": {"background": "#020814", "primary": "#55c8ff"},
+            "scene_assignments": [{"scene_number": 1, "motif": "particle_scatter"}],
+        }
+        report = {
+            "scene_number": 1,
+            "headline": "粒子改变方向",
+            "labels": ["入射光", "散射光"],
+            "actors": [{"kind": "ray"}, {"kind": "particle"}, {"kind": "observer"}],
+            "animation_beats": [{"at": 0.1}, {"at": 0.4}, {"at": 0.7}],
+        }
+        merged = normalize_creative_plan(source, art, [report], {"theme": {"accent": "#ffd36a"}, "scenes": []})
+        self.assertEqual(merged["scenes"][0]["motif"], "particle_scatter")
+        self.assertEqual(len(merged["scenes"][0]["actors"]), 3)
+        self.assertEqual(merged["theme"]["background"], "#020814")
+
+    def test_premium_motifs_render_distinct_scientific_visuals(self):
+        base = {"headline": "科学关系", "labels": ["光源", "介质", "观察者", "结果"], "steps": []}
+        motifs = ("spectrum_prism", "particle_scatter", "atmospheric_globe", "horizon_path", "split_synthesis")
+        outputs = [render_premium_scene({**base, "motif": motif}) for motif in motifs]
+        self.assertEqual(len(set(outputs)), len(motifs))
+        self.assertTrue(all('class="premium-stage' in output for output in outputs))
+
+    def test_creative_plan_assigns_premium_motif_when_agent_omits_scene(self):
+        scene = {
+            "scene_number": 1,
+            "headline": "大气中的光",
+            "subline": "短波光发生散射",
+            "quote": "光与大气分子碰撞后向不同方向散射。",
+            "variant": "process",
+            "semantic_motion": "mechanism",
+            "layout": "wide",
+            "chips": ["光", "大气"],
+            "steps": ["入射", "碰撞", "散射"],
+        }
+        result = apply_creative_plan([scene], {"scenes": []})
+        self.assertEqual(result[0]["motif"], "particle_scatter")
 
     def test_caption_does_not_isolate_comma_lead_in(self):
         words = [
@@ -158,6 +200,23 @@ class SciencePipelineTests(unittest.TestCase):
         fitted = science_content._fit_narration_length(original, 100)
         self.assertEqual(len(fitted["chapters"]), 3)
         self.assertEqual(fitted["sources"], [{"id": "S1"}])
+
+    @patch.object(science_content, "deepseek_settings", return_value={"pro_model": "deepseek-v4-pro"})
+    @patch.object(science_content, "create_client")
+    def test_topic_brief_recovers_when_agent_compression_is_still_too_long(self, client: Mock, _settings: Mock):
+        oversized = {
+            "chapters": [
+                {"title": f"章节{i}", "narration": "这段内容解释一个重要科学关系，并保留核心事实。" * 5, "visual_claim": "关系", "motion": "system", "evidence_ids": []}
+                for i in range(4)
+            ]
+        }
+        client.return_value.chat.completions.create.return_value = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(oversized, ensure_ascii=False)))]
+        )
+        fitted = science_content._fit_narration_length(oversized, 120)
+        total = sum(len(item["narration"]) for item in fitted["chapters"])
+        self.assertLessEqual(total, int(120 * 1.08))
+        self.assertEqual(len(fitted["chapters"]), 4)
 
 
 if __name__ == "__main__":
